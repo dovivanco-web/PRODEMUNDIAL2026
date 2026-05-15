@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PRODE Mundial 2026 - Pasión o Razón v7 Firebase</title>
+    <title>PRODE Mundial 2026 - Pasión o Razón v7 Firebase (clean)</title>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -126,16 +126,73 @@ const fbSaveParticipant = (p) => db.ref('participants/' + safeName(p.name)).set(
 const fbRemoveParticipant = (name) => db.ref('participants/' + safeName(name)).remove();
 const fbSaveOfficial = (data) => db.ref('officialResults').set(data);
 
-// ═══ ADMIN (v7) ═══
+// ═══ ADMIN + R32 MATCHUPS (v7 clean) ═══
 const ADMIN_USER = "Damián";
 const ADMIN_PIN_HASH = "a89f9eed6387bcd4166ccd90b1fa4fa4591a974870e7cec9e306bc6773b28541";
 const isAdminUser = (name) => (name || '').trim() === ADMIN_USER;
-const sha256hex = async (txt) => {
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt));
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+
+// Compact SHA-256 (pure JS) for PIN check (no crypto.subtle dependency)
+const sha256 = (ascii) => {
+    const rightRotate = (value, amount) => (value>>>amount) | (value<<(32-amount));
+    let mathPow=Math.pow, maxWord=mathPow(2,32);
+    let lengthProperty='length', i, j;
+    let result='';
+    let words=[];
+    let asciiBitLength=ascii[lengthProperty]*8;
+    let hash=sha256.h=sha256.h||[];
+    let k=sha256.k=sha256.k||[];
+    let primeCounter=k[lengthProperty];
+    let isComposite={};
+    for (let candidate=2; primeCounter<64; candidate++) {
+        if (!isComposite[candidate]) {
+            for (i=0; i<313; i+=candidate) isComposite[i]=candidate;
+            hash[primeCounter]=(mathPow(candidate,.5)*maxWord)|0;
+            k[primeCounter++]=(mathPow(candidate,1/3)*maxWord)|0;
+        }
+    }
+    ascii += '\x80';
+    while (ascii[lengthProperty]%64-56) ascii += '\x00';
+    for (i=0; i<ascii[lengthProperty]; i++) {
+        j=ascii.charCodeAt(i);
+        words[i>>2] |= j << ((3-i)%4)*8;
+    }
+    words[words[lengthProperty]] = ((asciiBitLength/maxWord)|0);
+    words[words[lengthProperty]] = (asciiBitLength);
+    for (j=0; j<words[lengthProperty];) {
+        let w=words.slice(j, j+=16);
+        let oldHash=hash;
+        hash=hash.slice(0,8);
+        for (i=0; i<64; i++) {
+            let w15=w[i-15], w2=w[i-2];
+            let a=hash[0], e=hash[4];
+            let temp1 = hash[7]
+                + (rightRotate(e,6)^rightRotate(e,11)^rightRotate(e,25))
+                + ((e&hash[5])^((~e)&hash[6]))
+                + k[i]
+                + (w[i] = (i<16) ? w[i] : (
+                    w[i-16]
+                    + (rightRotate(w15,7)^rightRotate(w15,18)^(w15>>>3))
+                    + w[i-7]
+                    + (rightRotate(w2,17)^rightRotate(w2,19)^(w2>>>10))
+                )|0);
+            let temp2 = (rightRotate(a,2)^rightRotate(a,13)^rightRotate(a,22))
+                + ((a&hash[1])^(a&hash[2])^(hash[1]&hash[2]));
+            hash = [(temp1+temp2)|0].concat(hash);
+            hash[4] = (hash[4]+temp1)|0;
+            hash.pop();
+        }
+        for (i=0; i<8; i++) hash[i] = (hash[i]+oldHash[i])|0;
+    }
+    for (i=0; i<8; i++) {
+        for (j=3; j+1; j--) {
+            let b=(hash[i]>>(j*8))&255;
+            result += ((b<16)?0:'') + b.toString(16);
+        }
+    }
+    return result;
 };
-const verifyAdminPin = async (pin) => (await sha256hex(pin)) === ADMIN_PIN_HASH;
-const fbSaveR32Matchups = (matchups) => db.ref('r32Matchups').set(matchups);
+const verifyAdminPin = (pin) => sha256(pin || '') === ADMIN_PIN_HASH;
+const fbSaveR32Matchups = (matchups) => db.ref('r32Matchups').set(matchups || {});
 const ALL_TEAMS = ([]).concat(...Object.values(EQUIPOS_POR_GRUPO));
 
 
@@ -217,12 +274,12 @@ const getFlow = (currentPreds, matches, r32Override) => {
         return "TBD";
     };
     const d = {};
-    // ═══ Dieciseisavos (M73-M88): por cruces reales cargados por Admin (si existen) ═══
+    // Dieciseisavos: si el admin cargó cruces reales, se usan acá
     if (r32Override && r32Override['M73']) {
-        for (let i = 73; i <= 88; i++) {
+        for (let i=73;i<=88;i++){
             const mid = `M${i}`;
-            const row = r32Override[mid] || null;
-            d[mid] = { a: row?.a || 'TBD', b: row?.b || 'TBD' };
+            const row = r32Override[mid] || {};
+            d[mid] = { a: row.a || 'TBD', b: row.b || 'TBD' };
         }
     } else {
     d['M73'] = { a: std['A'][1].name, b: std['B'][1].name };
@@ -723,12 +780,12 @@ const PredictionView = memo(({ matches, currentPreds, updateFn, isOfficial, grou
             {subPhase === 'eliminatoria' && (
                 <div className="view-enter space-y-20 md:space-y-32">
                     {canAccessKnockout && !isOfficial && (
-                        <div className={`glass p-5 md:p-6 rounded-2xl border ${knockoutLocked ? 'border-red-500/30' : 'border-slate-700/30'} flex flex-col md:flex-row items-center justify-between gap-4`}>
+                        <div className={"glass p-5 md:p-6 rounded-2xl border flex flex-col md:flex-row items-center justify-between gap-4 " + (knockoutLocked ? "border-red-500/30" : "border-slate-700/30")}>
                             <div className="flex items-center gap-4">
-                                <i className={`fa-solid ${knockoutLocked ? 'fa-lock' : 'fa-lock-open'} text-2xl ${knockoutLocked ? 'text-red-400' : 'text-slate-400'}`}></i>
+                                <i className={"fa-solid " + (knockoutLocked ? "fa-lock text-red-400" : "fa-lock-open text-slate-400") + " text-2xl"}></i>
                                 <div>
-                                    <p className={`font-black uppercase text-sm ${knockoutLocked ? 'text-red-400' : 'text-slate-300'}`}>{knockoutLocked ? 'Eliminatoria bloqueada' : 'Eliminatoria editable'}</p>
-                                    <p className="text-slate-500 text-xs mt-1">Al guardar con la eliminatoria completa, se bloquea y ya no se puede modificar.</p>
+                                    <p className={"font-black uppercase text-sm " + (knockoutLocked ? "text-red-400" : "text-slate-300")}>{knockoutLocked ? "Eliminatoria bloqueada" : "Eliminatoria editable"}</p>
+                                    <p className="text-slate-500 text-xs mt-1">Cuando bloqueás, ya no podés cambiar tus pronósticos de cruces.</p>
                                 </div>
                             </div>
                             {!knockoutLocked && (
@@ -750,14 +807,14 @@ const PredictionView = memo(({ matches, currentPreds, updateFn, isOfficial, grou
                             <div>
                                 <h2 className="text-4xl md:text-7xl font-black italic uppercase tracking-tighter mb-4 md:mb-6 border-l-8 pl-6 md:pl-8 text-white border-[#deff9a]">Dieciseisavos</h2>
                                 <p className="text-xs font-black uppercase tracking-widest mb-8 md:mb-12 pl-8 md:pl-16 text-slate-500">4 pts resultado + 2 pts/gol exacto</p>
-                                {(!r32Matchups || !r32Matchups['M73']) && !isOfficial ? (
-                                    <div className="glass p-10 rounded-3xl border border-yellow-500/20 text-center">
-                                        <i className="fa-solid fa-hourglass-half text-yellow-400 text-4xl"></i>
-                                        <p className="font-black uppercase tracking-widest text-yellow-400 mt-4">Esperando cruces reales del administrador</p>
-                                        <p className="text-slate-500 text-sm mt-2">El administrador debe cargar los cruces de dieciseisavos para poder pronosticar.</p>
-                                    </div>
-                                ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
+                                {(!isOfficial && (!r32Matchups || !r32Matchups['M73'])) ? (
+  <div className="glass p-10 rounded-3xl border border-yellow-500/20 text-center">
+    <i className="fa-solid fa-hourglass-half text-yellow-400 text-4xl"></i>
+    <p className="font-black uppercase tracking-widest text-yellow-400 mt-4">Esperando cruces reales del administrador</p>
+    <p className="text-slate-500 text-sm mt-2">El administrador debe cargar los cruces de dieciseisavos para poder pronosticar.</p>
+  </div>
+) : (
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
                                     {matches.filter(m => m.phase === 'Dieciseisavos').map((m, idx) => (
                                         <R32MatchRow key={m.id} m={m} teamA={flow[m.id]?.a || "TBD"} teamB={flow[m.id]?.b || "TBD"} preds={currentPreds} onUpdate={updateFn} matchIndex={idx} disabled={knockoutLocked && !isOfficial} />
                                     ))}
@@ -1112,22 +1169,22 @@ function App() {
     const handleLockGroups = useCallback(() => {
         if (window.confirm('¿Bloquear la fase de grupos? Una vez bloqueado, NO podrás modificar los pronósticos de grupos.')) {
             setGroupsLocked(true);
-            fbSaveParticipant({ name: currentUser, predictions: preds, groupsLocked: true, knockoutLocked });
+            fbSaveParticipant({ name: currentUser, predictions: preds, groupsLocked: true });
             setHasUnsaved(false);
             addToast('\uD83D\uDD12 ¡Fase de grupos bloqueada! Ahora completá la eliminatoria.', 'success');
         }
     }, [currentUser, preds, addToast]);
 
     const isKnockoutComplete = useCallback(() => {
-        const diec = matches.filter(m=>m.phase==='Dieciseisavos');
-        const rest = matches.filter(m=>m.phase!=='Grupos' && m.phase!=='Dieciseisavos');
-        const okDiec = diec.every(m=>{
+        const diec = matches.filter(m => m.phase === 'Dieciseisavos');
+        const rest = matches.filter(m => m.phase !== 'Grupos' && m.phase !== 'Dieciseisavos');
+        const okDiec = diec.every(m => {
             const p = preds[m.id];
             if (!p || typeof p.ga !== 'number' || typeof p.gb !== 'number') return false;
             if (p.ga === p.gb) return !!p.winner;
             return true;
         });
-        const okRest = rest.every(m=>{ const p = preds[m.id]; return p && !!p.winner; });
+        const okRest = rest.every(m => { const p = preds[m.id]; return p && !!p.winner; });
         return okDiec && okRest;
     }, [preds, matches]);
 
@@ -1144,8 +1201,13 @@ function App() {
 
     const handleSave = () => {
         if (!currentUser) return;
-        fbSaveParticipant({ name: currentUser, predictions: preds, groupsLocked, knockoutLocked });
-        setHasUnsaved(false); addToast('¡Progreso guardado!', 'success');
+        const lockNow = groupsLocked && !knockoutLocked && isKnockoutComplete();
+        const newKnock = lockNow ? true : knockoutLocked;
+        setKnockoutLocked(newKnock);
+        fbSaveParticipant({ name: currentUser, predictions: preds, groupsLocked, knockoutLocked: newKnock });
+        setHasUnsaved(false);
+        if (lockNow) addToast('\uD83D\uDD12 Eliminatoria bloqueada al guardar', 'success');
+        else addToast('¡Progreso guardado!', 'success');
     };
     const handleExportClipboard = async () => {
         const code = btoa(unescape(encodeURIComponent(JSON.stringify({ name: currentUser, predictions: preds, groupsLocked }))));
@@ -1178,27 +1240,25 @@ function App() {
     };
     const handleClearPreds = () => {
         if (window.confirm('¿Borrar TODAS las predicciones de ' + currentUser + '? (Esto también desbloqueará los grupos)')) {
-            setPreds({}); setGroupsLocked(false); setKnockoutLocked(false);
-            fbSaveParticipant({ name: currentUser, predictions: {}, groupsLocked: false, knockoutLocked: false });
+            setPreds({}); setGroupsLocked(false);
+            fbSaveParticipant({ name: currentUser, predictions: {}, groupsLocked: false });
             addToast('Predicciones borradas', 'warn');
         }
     };
     const handleDeleteParticipant = (name) => {
         if (window.confirm(`¿Eliminar a ${name}? Esta acción no se puede deshacer.`)) {
             fbRemoveParticipant(name);
-            if (currentUser === name) { setCurrentUser(null); setPreds({}); setGroupsLocked(false); setKnockoutLocked(false); }
+            if (currentUser === name) { setCurrentUser(null); setPreds({}); setGroupsLocked(false); }
             addToast(`${name} eliminado`, 'warn');
         }
     };
-    const handleAdminAccess = async () => {
+    const handleAdminAccess = () => {
         if (!isAdminUser(currentUser)) { addToast('No tenés permisos de administrador', 'error'); return; }
         const entered = window.prompt('Ingresá el PIN de administrador:');
         if (!entered) return;
-        try {
-            const ok = await verifyAdminPin(entered);
-            if (ok) { setAdminUnlocked(true); setView('admin'); addToast('Admin habilitado', 'success'); }
-            else { addToast('PIN incorrecto', 'error'); }
-        } catch { addToast('Error validando PIN', 'error'); }
+        const ok = verifyAdminPin(entered);
+        if (ok) { setAdminUnlocked(true); setView('admin'); addToast('Admin habilitado', 'success'); }
+        else { addToast('PIN incorrecto', 'error'); }
     };
     const handleCreateUser = () => {
         const name = newUserName.trim();
@@ -1206,7 +1266,7 @@ function App() {
         if (participants.find(p => p.name === name)) { addToast('Ese nombre ya existe', 'error'); return; }
         if (name.trim() === ADMIN_USER) { addToast('Nombre reservado', 'error'); return; }
         fbSaveParticipant({ name, predictions: {}, groupsLocked: false, knockoutLocked: false });
-        setCurrentUser(name); setPreds({}); setGroupsLocked(false); setKnockoutLocked(false); setShowNewUserModal(false); setNewUserName('');
+        setCurrentUser(name); setPreds({}); setGroupsLocked(false); setShowNewUserModal(false); setNewUserName('');
         addToast(`¡Bienvenido/a ${name}!`, 'success');
     };
     const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
@@ -1417,7 +1477,7 @@ function App() {
                                 })}
                             </div>
                             <div className="mt-6 flex flex-col md:flex-row gap-3 justify-end">
-                                <button onClick={()=>{ fbSaveR32Matchups(r32Matchups||{}); addToast('Cruces de dieciseisavos guardados', 'success'); }} className="bg-yellow-500 hover:bg-yellow-400 text-black px-8 py-4 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2">
+                                <button onClick={()=>{ fbSaveR32Matchups(r32Matchups||{}); addToast('Cruces guardados', 'success'); }} className="bg-yellow-500 hover:bg-yellow-400 text-black px-8 py-4 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2">
                                     <i className="fa-solid fa-floppy-disk"></i> Guardar Cruces
                                 </button>
                                 <button onClick={()=>{ if(window.confirm('¿Limpiar todos los cruces?')){ setR32Matchups({}); fbSaveR32Matchups({}); addToast('Cruces limpiados', 'warn'); } }} className="bg-slate-800 hover:bg-slate-700 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2">
@@ -1434,7 +1494,7 @@ function App() {
                 )}
             </main>
             <footer className="max-w-7xl mx-auto px-6 mt-20 py-10 border-t border-white/5 text-center">
-                <p className="text-slate-700 text-xs font-bold uppercase tracking-widest">PRODE 26 · Mundial FIFA 2026 · Pasión o Razón · v7 🔥 Firebase</p>
+                <p className="text-slate-700 text-xs font-bold uppercase tracking-widest">PRODE 26 · Mundial FIFA 2026 · Pasión o Razón · v7 🔥 Firebase (clean)</p>
             </footer>
         </div>
     );

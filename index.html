@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PRODE Mundial 2026 - Pasión o Razón v7 Firebase (clean)</title>
+    <title>PRODE Mundial 2026 - Pasión o Razón v7 Firebase FINAL</title>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -72,7 +72,7 @@
 </head>
 <body>
     <div id="root"></div>
-    <script type="text/babel">
+    <script type="text/babel" data-presets="env,react">
 const { useState, useEffect, useMemo, useCallback, useRef, memo } = React;
 
 // Mostrar errores en pantalla (evita 'pantalla en blanco')
@@ -87,8 +87,11 @@ const showFatal = (msg) => {
   const pre = document.getElementById('fatal_pre');
   if (pre) pre.textContent = String(msg);
 };
-window.addEventListener('error', (e)=>{ showFatal(e?.message || String(e)); });
-window.addEventListener('unhandledrejection', (e)=>{ showFatal(e?.reason?.message || String(e?.reason || e)); });
+window.addEventListener('error', (e)=>{ showFatal((e && e.message) ? e.message : String(e)); });
+window.addEventListener('unhandledrejection', (e)=>{ 
+  const r = e && e.reason;
+  showFatal((r && r.message) ? r.message : String(r || e));
+});
 
 
 const EQUIPOS_POR_GRUPO = {
@@ -142,7 +145,7 @@ const fbSaveParticipant = (p) => db.ref('participants/' + safeName(p.name)).set(
 const fbRemoveParticipant = (name) => db.ref('participants/' + safeName(name)).remove();
 const fbSaveOfficial = (data) => db.ref('officialResults').set(data);
 
-// ═══ ADMIN + R32 MATCHUPS (v7 clean) ═══
+// ═══ ADMIN + R32 MATCHUPS (v7 FINAL) ═══
 const ADMIN_USER = "Damián";
 const ADMIN_PIN_HASH = "a89f9eed6387bcd4166ccd90b1fa4fa4591a974870e7cec9e306bc6773b28541"; // SHA-256
 const isAdminUser = (name) => (name || '').trim() === ADMIN_USER;
@@ -462,6 +465,21 @@ const RulesSection = memo(() => {
                         <p>Los <strong className="text-white">2 primeros</strong> de cada grupo clasifican directo. Los <strong className="text-blue-400">8 mejores terceros</strong> de los 12 grupos también avanzan a dieciseisavos.</p>
                     </div>
                 </div>
+                <div className="bg-gradient-to-r from-[#deff9a]/10 to-yellow-500/10 rounded-2xl p-6 border-2 border-[#deff9a]/30 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 text-8xl opacity-5 font-black">$</div>
+                    <h4 className="font-black text-[#deff9a] uppercase text-sm tracking-widest mb-4"><i className="fa-solid fa-sack-dollar mr-2"></i>Reparto del Pozo</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-black/30 rounded-xl p-4 text-center border border-[#deff9a]/20">
+                            <span className="text-4xl font-black text-[#deff9a] block">80%</span>
+                            <span className="text-xs font-black text-slate-400 uppercase tracking-widest mt-2 block"><i className="fa-solid fa-trophy text-yellow-400 mr-1"></i>1° Puesto</span>
+                        </div>
+                        <div className="bg-black/30 rounded-xl p-4 text-center border border-slate-700/50">
+                            <span className="text-4xl font-black text-slate-400 block">20%</span>
+                            <span className="text-xs font-black text-slate-500 uppercase tracking-widest mt-2 block"><i className="fa-solid fa-medal text-slate-500 mr-1"></i>2° Puesto</span>
+                        </div>
+                    </div>
+                    <p className="text-slate-400 text-xs mt-4 text-center italic">El pozo se forma con las inscripciones de todos los participantes</p>
+                </div>
             </div>
         </div>
     );
@@ -587,40 +605,44 @@ const R32MatchRow = memo(({ m, teamA, teamB, preds, onUpdate, matchIndex, disabl
                 <span>Dieciseisavos</span>
                 <span className="text-[#deff9a]">4 PTS + 2/GOL</span>
             </div>
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 flex-1 justify-end overflow-hidden">
-                    <span className="text-[10px] md:text-[11px] font-bold text-slate-300 truncate">{teamA}</span>
-                    <img src={`https://flagcdn.com/w40/${FLAGS[teamA] || 'un'}.png`} className="flag" alt={teamA} loading="lazy" />
-                </div>
-                <div className="flex items-center gap-1 mx-2 md:mx-3">
-                    <input id={`input-r32-${m.id}-ga`} type="text" inputMode="numeric" className="match-input" value={gaVal ?? ""} onChange={e => handleInputChange(e, 'ga')} autoComplete="off" maxLength="2" disabled={bothTBD || disabled} />
-                    <span className="text-slate-600 font-bold px-1 text-[10px]">-</span>
-                    <input id={`input-r32-${m.id}-gb`} type="text" inputMode="numeric" className="match-input" value={gbVal ?? ""} onChange={e => handleInputChange(e, 'gb')} autoComplete="off" maxLength="2" disabled={bothTBD || disabled} />
-                </div>
-                <div className="flex items-center gap-2 flex-1 overflow-hidden">
-                    <img src={`https://flagcdn.com/w40/${FLAGS[teamB] || 'un'}.png`} className="flag" alt={teamB} loading="lazy" />
-                    <span className="text-[10px] md:text-[11px] font-bold text-slate-300 truncate">{teamB}</span>
-                </div>
+            <div className="flex items-center gap-2">
+                <img src={`https://flagcdn.com/w40/${FLAGS[teamA] || 'un'}.png`} className="flag" alt={teamA} loading="lazy" />
+                <span className="text-[11px] font-bold text-slate-300">{teamA}</span>
             </div>
+            <div className="flex items-center justify-center gap-2">
+                <input id={`input-r32-${m.id}-ga`} type="text" inputMode="numeric" className="match-input" value={gaVal ?? ""} onChange={e => handleInputChange(e, 'ga')} autoComplete="off" maxLength="2" disabled={bothTBD || disabled} />
+                <span className="text-slate-600 font-bold px-1 text-[10px]">-</span>
+                <input id={`input-r32-${m.id}-gb`} type="text" inputMode="numeric" className="match-input" value={gbVal ?? ""} onChange={e => handleInputChange(e, 'gb')} autoComplete="off" maxLength="2" disabled={bothTBD || disabled} />
+            </div>
+            <div className="flex items-center gap-2">
+                <img src={`https://flagcdn.com/w40/${FLAGS[teamB] || 'un'}.png`} className="flag" alt={teamB} loading="lazy" />
+                <span className="text-[11px] font-bold text-slate-300">{teamB}</span>
+            </div>
+            
             {isDraw && (
                 <div className="penalty-section rounded-xl p-3 mt-1">
                     <p className="text-[9px] font-black text-red-400 uppercase tracking-widest mb-2 text-center">
                         <i className="fa-solid fa-futbol mr-1"></i>Ganador por Penales
                     </p>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 gap-2">
                         <div onClick={() => handlePenaltyPick(teamA)} className={`winner-select p-2 rounded-lg flex items-center justify-center gap-2 ${isPickedA ? 'active' : 'bg-slate-950/50'} ${teamA === 'TBD' ? 'opacity-40 cursor-not-allowed' : ''}`}>
                             <img src={`https://flagcdn.com/w40/${FLAGS[teamA] || 'un'}.png`} className="flag" alt={teamA} loading="lazy" />
-                            <span className="text-[10px] font-black truncate">{teamA}</span>
+                            <span className="text-[10px] font-black">{teamA}</span>
                             <i className="fa-solid fa-check text-sm check-x"></i>
                         </div>
                         <div onClick={() => handlePenaltyPick(teamB)} className={`winner-select p-2 rounded-lg flex items-center justify-center gap-2 ${isPickedB ? 'active' : 'bg-slate-950/50'} ${teamB === 'TBD' ? 'opacity-40 cursor-not-allowed' : ''}`}>
                             <img src={`https://flagcdn.com/w40/${FLAGS[teamB] || 'un'}.png`} className="flag" alt={teamB} loading="lazy" />
-                            <span className="text-[10px] font-black truncate">{teamB}</span>
+                            <span className="text-[10px] font-black">{teamB}</span>
                             <i className="fa-solid fa-check text-sm check-x"></i>
                         </div>
                     </div>
                 </div>
             )}
+        
+        <div className="flex justify-between px-1 text-[8px] font-black uppercase text-slate-600 tracking-tighter italic mt-1">
+            <span>{m.date} - {m.time}</span>
+            <span className="max-w-[150px] truncate text-right">{m.stadium}</span>
+        </div>
         </div>
     );
 });
@@ -657,6 +679,11 @@ const PlayoffWinnerRow = memo(({ m, teamA, teamB, preds, onUpdate, disabled }) =
                     <i className="fa-solid fa-check text-xl check-x"></i>
                 </div>
             </div>
+        
+        <div className="flex justify-between px-1 text-[8px] font-black uppercase text-slate-600 tracking-tighter italic mt-1">
+            <span>{m.date} - {m.time}</span>
+            <span className="max-w-[150px] truncate text-right">{m.stadium}</span>
+        </div>
         </div>
     );
 });
@@ -796,23 +823,6 @@ const PredictionView = memo(({ matches, currentPreds, updateFn, isOfficial, grou
 
             {subPhase === 'eliminatoria' && (
                 <div className="view-enter space-y-20 md:space-y-32">
-                    {canAccessKnockout && !isOfficial && (
-                        <div className={"glass p-5 md:p-6 rounded-2xl border flex flex-col md:flex-row items-center justify-between gap-4 " + (knockoutLocked ? "border-red-500/30" : "border-slate-700/30")}>
-                            <div className="flex items-center gap-4">
-                                <i className={"fa-solid " + (knockoutLocked ? "fa-lock text-red-400" : "fa-lock-open text-slate-400") + " text-2xl"}></i>
-                                <div>
-                                    <p className={"font-black uppercase text-sm " + (knockoutLocked ? "text-red-400" : "text-slate-300")}>{knockoutLocked ? "Eliminatoria bloqueada" : "Eliminatoria editable"}</p>
-                                    <p className="text-slate-500 text-xs mt-1">Al guardar con la eliminatoria completa, se bloquea automáticamente.</p>
-                                </div>
-                            </div>
-                            {!knockoutLocked && (
-                                <button onClick={onLockKnockout} className="bg-red-600 hover:bg-red-500 text-white px-7 py-3 rounded-2xl font-black uppercase text-[10px] flex items-center gap-2 transition-colors whitespace-nowrap">
-                                    <i className="fa-solid fa-lock"></i> Bloquear Eliminatoria
-                                </button>
-                            )}
-                        </div>
-                    )}
-
                     {!canAccessKnockout ? (
                         <div className="text-center py-20 md:py-40 glass rounded-[2rem] md:rounded-[4rem] border-2 border-dashed border-white/5">
                             <i className="fa-solid fa-lock text-6xl text-slate-800 mb-6"></i>
@@ -821,22 +831,32 @@ const PredictionView = memo(({ matches, currentPreds, updateFn, isOfficial, grou
                         </div>
                     ) : (
                         <>
+                    {knockoutLocked && !isOfficial && (
+                        <div className="lock-glow glass p-6 rounded-2xl border border-red-500/30 flex items-center justify-center gap-4 text-center">
+                            <i className="fa-solid fa-lock text-red-400 text-2xl"></i>
+                            <div>
+                                <p className="font-black text-red-400 uppercase tracking-widest text-sm">Fase Eliminatoria Bloqueada</p>
+                                <p className="text-slate-500 text-xs mt-1">Los pronósticos de eliminatoria ya no se pueden modificar</p>
+                            </div>
+                        </div>
+                    )}
+
                             <div>
                                 <h2 className="text-4xl md:text-7xl font-black italic uppercase tracking-tighter mb-4 md:mb-6 border-l-8 pl-6 md:pl-8 text-white border-[#deff9a]">Dieciseisavos</h2>
                                 <p className="text-xs font-black uppercase tracking-widest mb-8 md:mb-12 pl-8 md:pl-16 text-slate-500">4 pts resultado + 2 pts/gol exacto</p>
                                 {(!isOfficial && (!r32Matchups || !r32Matchups['M73'])) ? (
-  <div className="glass p-10 rounded-3xl border border-yellow-500/20 text-center">
-    <i className="fa-solid fa-hourglass-half text-yellow-400 text-4xl"></i>
-    <p className="font-black uppercase tracking-widest text-yellow-400 mt-4">Esperando cruces reales del administrador</p>
-    <p className="text-slate-500 text-sm mt-2">El administrador debe cargar los cruces de dieciseisavos para poder pronosticar.</p>
-  </div>
-) : (
-<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
+                            <div className="glass p-10 rounded-3xl border border-yellow-500/20 text-center">
+                                <i className="fa-solid fa-hourglass-half text-yellow-400 text-4xl"></i>
+                                <p className="font-black uppercase tracking-widest text-yellow-400 mt-4">Esperando cruces reales del administrador</p>
+                                <p className="text-slate-500 text-sm mt-2">El administrador debe cargar los cruces de dieciseisavos para poder pronosticar.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
                                     {matches.filter(m => m.phase === 'Dieciseisavos').map((m, idx) => (
-                                        <R32MatchRow key={m.id} m={m} teamA={flow[m.id]?.a || "TBD"} teamB={flow[m.id]?.b || "TBD"} preds={currentPreds} onUpdate={updateFn} matchIndex={idx} disabled={knockoutLocked && !isOfficial} />
+                                        <R32MatchRow key={m.id} m={m} teamA={flow[m.id]?.a || "TBD"} teamB={flow[m.id]?.b || "TBD"} preds={currentPreds} onUpdate={updateFn} matchIndex={idx} />
                                     ))}
                                 </div>
-                                )}</div>
+                        )}
                             </div>
                             {['Octavos', 'Cuartos', 'Semis', 'Tercer Puesto', 'Final'].map(phase => {
                                 const phaseMatches = matches.filter(m => m.phase === phase);
@@ -923,6 +943,7 @@ function App() {
     const [groupsLocked, setGroupsLocked] = useState(false);
     const [knockoutLocked, setKnockoutLocked] = useState(false);
     const [r32Matchups, setR32Matchups] = useState({});
+    const [prevRanking, setPrevRanking] = useState({});
     const [hasUnsaved, setHasUnsaved] = useState(false);
     const [showConfetti, setShowConfetti] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -1039,12 +1060,38 @@ function App() {
                 m.push({ id: `G-${g}-${i+1}`, group: g, teamA: info.t1, teamB: info.t2, phase: "Grupos", date: info.d, time: info.time, stadium: info.s, pts: 3 });
             });
         });
-        for(let i=73; i<=88; i++) m.push({ id: `M${i}`, phase: "Dieciseisavos", pts: 4 });
-        for(let i=89; i<=96; i++) m.push({ id: `M${i}`, phase: "Octavos", pts: 12 });
-        for(let i=97; i<=100; i++) m.push({ id: `M${i}`, phase: "Cuartos", pts: 15 });
-        for(let i=101; i<=102; i++) m.push({ id: `M${i}`, phase: "Semis", pts: 20 });
-        m.push({ id: 'M103', phase: "Tercer Puesto", pts: 15 });
-        m.push({ id: 'M104', phase: "Final", pts: 25 });
+            m.push({ id: 'M73', phase: "Dieciseisavos", pts: 4, date: "Domingo 28 Jun", time: "14:00", stadium: "Los Angeles Stadium" });
+    m.push({ id: 'M74', phase: "Dieciseisavos", pts: 4, date: "Lunes 29 Jun", time: "15:30", stadium: "Boston Stadium" });
+    m.push({ id: 'M75', phase: "Dieciseisavos", pts: 4, date: "Lunes 29 Jun", time: "20:00", stadium: "Estadio Monterrey" });
+    m.push({ id: 'M76', phase: "Dieciseisavos", pts: 4, date: "Lunes 29 Jun", time: "12:00", stadium: "Houston Stadium" });
+    m.push({ id: 'M77', phase: "Dieciseisavos", pts: 4, date: "Martes 30 Jun", time: "16:00", stadium: "NY NJ Stadium" });
+    m.push({ id: 'M78', phase: "Dieciseisavos", pts: 4, date: "Martes 30 Jun", time: "12:00", stadium: "Dallas Stadium" });
+    m.push({ id: 'M79', phase: "Dieciseisavos", pts: 4, date: "Martes 30 Jun", time: "20:00", stadium: "Estadio Ciudad de México" });
+    m.push({ id: 'M80', phase: "Dieciseisavos", pts: 4, date: "Miércoles 1 Jul", time: "11:00", stadium: "Atlanta Stadium" });
+    m.push({ id: 'M81', phase: "Dieciseisavos", pts: 4, date: "Miércoles 1 Jul", time: "19:00", stadium: "SF Bay Area Stadium" });
+    m.push({ id: 'M82', phase: "Dieciseisavos", pts: 4, date: "Miércoles 1 Jul", time: "14:00", stadium: "Seattle Stadium" });
+    m.push({ id: 'M83', phase: "Dieciseisavos", pts: 4, date: "Jueves 2 Jul", time: "—", stadium: "Toronto Stadium" });
+    m.push({ id: 'M84', phase: "Dieciseisavos", pts: 4, date: "Jueves 2 Jul", time: "—", stadium: "Los Angeles Stadium" });
+    m.push({ id: 'M85', phase: "Dieciseisavos", pts: 4, date: "Jueves 2 Jul", time: "—", stadium: "BC Place Vancouver" });
+    m.push({ id: 'M86', phase: "Dieciseisavos", pts: 4, date: "Viernes 3 Jul", time: "17:00", stadium: "Miami Stadium" });
+    m.push({ id: 'M87', phase: "Dieciseisavos", pts: 4, date: "Viernes 3 Jul", time: "20:30", stadium: "Kansas City Stadium" });
+    m.push({ id: 'M88', phase: "Dieciseisavos", pts: 4, date: "Viernes 3 Jul", time: "13:00", stadium: "Dallas Stadium" });
+    m.push({ id: 'M89', phase: "Octavos", pts: 12, date: "Sábado 4 Jul", time: "16:00", stadium: "Philadelphia Stadium" });
+    m.push({ id: 'M90', phase: "Octavos", pts: 12, date: "Sábado 4 Jul", time: "12:00", stadium: "Houston Stadium" });
+    m.push({ id: 'M91', phase: "Octavos", pts: 12, date: "Domingo 5 Jul", time: "14:00", stadium: "NY NJ Stadium" });
+    m.push({ id: 'M92', phase: "Octavos", pts: 12, date: "Domingo 5 Jul", time: "19:00", stadium: "Estadio Azteca" });
+    m.push({ id: 'M93', phase: "Octavos", pts: 12, date: "Lunes 6 Jul", time: "14:00", stadium: "Dallas Stadium" });
+    m.push({ id: 'M94', phase: "Octavos", pts: 12, date: "Lunes 6 Jul", time: "19:00", stadium: "Seattle Stadium" });
+    m.push({ id: 'M95', phase: "Octavos", pts: 12, date: "Martes 7 Jul", time: "11:00", stadium: "Atlanta Stadium" });
+    m.push({ id: 'M96', phase: "Octavos", pts: 12, date: "Martes 7 Jul", time: "14:00", stadium: "BC Place Vancouver" });
+    m.push({ id: 'M97', phase: "Cuartos", pts: 15, date: "Jueves 9 Jul", time: "14:00", stadium: "Boston Stadium" });
+    m.push({ id: 'M98', phase: "Cuartos", pts: 15, date: "Viernes 10 Jul", time: "14:00", stadium: "Los Angeles Stadium" });
+    m.push({ id: 'M99', phase: "Cuartos", pts: 15, date: "Sábado 11 Jul", time: "16:00", stadium: "Miami Stadium" });
+    m.push({ id: 'M100', phase: "Cuartos", pts: 15, date: "Sábado 11 Jul", time: "20:00", stadium: "Kansas City Stadium" });
+    m.push({ id: 'M101', phase: "Semis", pts: 20, date: "Martes 14 Jul", time: "14:00", stadium: "Dallas Stadium" });
+    m.push({ id: 'M102', phase: "Semis", pts: 20, date: "Miércoles 15 Jul", time: "14:00", stadium: "Atlanta Stadium" });
+    m.push({ id: 'M103', phase: "Tercer Puesto", pts: 15, date: "Sábado 18 Jul", time: "16:00", stadium: "Miami Stadium" });
+    m.push({ id: 'M104', phase: "Final", pts: 25, date: "Domingo 19 Jul", time: "14:00", stadium: "NY NJ Stadium" });
         return m;
     }, []);
 
@@ -1097,9 +1144,66 @@ function App() {
         return pts;
     }, [matches, officialResults]);
 
+    const getScoreBreakdown = useCallback((userP) => {
+        const bd = {total:0, groups:{}, dieciseisavos:0, octavos:0, cuartos:0, semis:0, final_:0, tercero:0, campeon:0};
+        Object.keys(EQUIPOS_POR_GRUPO).forEach(g => bd.groups[g]=0);
+        if (!officialResults || Object.keys(officialResults).length===0) return bd;
+        const oF = getFlow(officialResults, matches, r32Matchups);
+        const uF = getFlow(userP||{}, matches, r32Matchups);
+        const allGD = Object.keys(EQUIPOS_POR_GRUPO).every(g=>matches.filter(mt=>mt.group===g).every(mt=>typeof officialResults[mt.id]?.ga==='number'));
+        Object.keys(EQUIPOS_POR_GRUPO).forEach(g=>{
+            let gP=0;
+            matches.filter(m=>m.group===g).forEach(m=>{
+                const o=officialResults[m.id]; if(!o||typeof o.ga!=='number'||typeof o.gb!=='number') return;
+                const u=(userP||{})[m.id]; if(!u||typeof u.ga!=='number'||typeof u.gb!=='number') return;
+                if((u.ga>u.gb?1:u.ga<u.gb?-1:0)===(o.ga>o.gb?1:o.ga<o.gb?-1:0)) gP+=3;
+                if(u.ga===o.ga) gP+=2; if(u.gb===o.gb) gP+=2;
+            });
+            const fin=matches.filter(mt=>mt.group===g).every(mt=>typeof officialResults[mt.id]?.ga==='number');
+            if(fin) uF.std[g].forEach((t,i)=>{if(oF.std[g][i]&&t.name===oF.std[g][i].name) gP+=5;});
+            if(allGD){const oT=getTeamsInPhase(oF,matches,'Dieciseisavos');const uT=getTeamsInPhase(uF,matches,'Dieciseisavos');EQUIPOS_POR_GRUPO[g].forEach(team=>{if(uT.has(team)&&oT.has(team)) gP+=10;});}
+            bd.groups[g]=gP;
+        });
+        matches.filter(m=>m.phase==='Dieciseisavos').forEach(m=>{
+            const o=officialResults[m.id]; if(!o||typeof o.ga!=='number'||typeof o.gb!=='number') return;
+            const u=(userP||{})[m.id]; if(!u||typeof u.ga!=='number'||typeof u.gb!=='number') return;
+            if((u.ga>u.gb?1:u.ga<u.gb?-1:0)===(o.ga>o.gb?1:o.ga<o.gb?-1:0)) bd.dieciseisavos+=4;
+            if(u.ga===o.ga) bd.dieciseisavos+=2; if(u.gb===o.gb) bd.dieciseisavos+=2;
+        });
+        [['Octavos',12],['Cuartos',15],['Semis',20],['Final',25]].forEach(([ph,pt])=>{
+            const oT=getTeamsInPhase(oF,matches,ph);const uT=getTeamsInPhase(uF,matches,ph);
+            if(oT.size===0) return; let s=0; uT.forEach(t=>{if(t!=='TBD'&&oT.has(t)) s+=pt;});
+            if(ph==='Octavos') bd.octavos=s; else if(ph==='Cuartos') bd.cuartos=s; else if(ph==='Semis') bd.semis=s; else bd.final_=s;
+        });
+        if(oF._champion&&oF._champion!=='TBD'&&uF._champion===oF._champion) bd.campeon=35;
+        if(oF._third&&oF._third!=='TBD'&&uF._third===oF._third) bd.tercero=15;
+        bd.total=Object.values(bd.groups).reduce((s,v)=>s+v,0)+bd.dieciseisavos+bd.octavos+bd.cuartos+bd.semis+bd.final_+bd.tercero+bd.campeon;
+        return bd;
+    }, [matches, officialResults, r32Matchups]);
+
+    const maxPossible = useMemo(() => {
+        let mx=0;
+        matches.filter(m=>m.phase==='Grupos').forEach(m=>{if(typeof officialResults[m.id]?.ga==='number') mx+=7;});
+        const allGD=Object.keys(EQUIPOS_POR_GRUPO).every(g=>matches.filter(m=>m.group===g).every(m=>typeof officialResults[m.id]?.ga==='number'));
+        if(allGD){mx+=240+320;
+            matches.filter(m=>m.phase==='Dieciseisavos').forEach(m=>{if(typeof officialResults[m.id]?.ga==='number') mx+=8;});
+            const oF=getFlow(officialResults,matches,r32Matchups);
+            if(getTeamsInPhase(oF,matches,'Octavos').size>0) mx+=192;
+            if(getTeamsInPhase(oF,matches,'Cuartos').size>0) mx+=120;
+            if(getTeamsInPhase(oF,matches,'Semis').size>0) mx+=80;
+            if(getTeamsInPhase(oF,matches,'Final').size>0) mx+=50;
+            if(oF._champion&&oF._champion!=='TBD') mx+=35;
+            if(oF._third&&oF._third!=='TBD') mx+=15;
+        }
+        return mx||1;
+    }, [matches, officialResults, r32Matchups]);
+
     const ranking = useMemo(() => {
-        return participants.map(p => ({ name: p.name, pts: calculateTotalScore(p.predictions, p.groupsLocked) })).sort((a,b) => b.pts - a.pts);
-    }, [participants, calculateTotalScore]);
+        return participants.map(p => {
+            const bd = getScoreBreakdown(p.predictions);
+            return { name: p.name, ...bd, efficiency: maxPossible > 1 ? Math.round(bd.total / maxPossible * 1000) / 10 : 0 };
+        }).sort((a,b) => b.total - a.total);
+    }, [participants, getScoreBreakdown, maxPossible]);
 
     // Firebase real-time listeners
     useEffect(() => {
@@ -1118,14 +1222,51 @@ function App() {
         const unsubO = db.ref('officialResults').on('value', snap => {
             setOfficialResults(snap.val() || {});
         });
-        return () => { db.ref('participants').off('value', unsubP); db.ref('officialResults').off('value', unsubO); };
+        const unsubPR = db.ref('previousRanking').on('value', snap => {
+            setPrevRanking(snap.val() || {});
+        });
+        return () => { db.ref('participants').off('value', unsubP); db.ref('officialResults').off('value', unsubO); db.ref('previousRanking').off('value', unsubPR); };
     }, []);
+
+    // Auto-compute R32 matchups from official results
+    useEffect(() => {
+        if (!matches || matches.length === 0) return;
+        const groupMatches = matches.filter(m => m.phase === 'Grupos');
+        const allGroupsDone = groupMatches.every(m => {
+            const o = officialResults[m.id];
+            return o && typeof o.ga === 'number' && typeof o.gb === 'number';
+        });
+        if (!allGroupsDone) return;
+        const officialFlow = getFlow(officialResults, matches, null);
+        const computed = {};
+        for (let i = 73; i <= 88; i++) {
+            const mid = `M${i}`;
+            if (officialFlow[mid]) {
+                computed[mid] = { a: officialFlow[mid].a || 'TBD', b: officialFlow[mid].b || 'TBD' };
+            }
+        }
+        const hasValid = Object.values(computed).some(v => v.a !== 'TBD' || v.b !== 'TBD');
+        if (hasValid) {
+            const currentStr = JSON.stringify(r32Matchups || {});
+            const newStr = JSON.stringify(computed);
+            if (currentStr !== newStr) {
+                setR32Matchups(computed);
+                fbSaveR32Matchups(computed);
+            }
+        }
+    }, [officialResults, matches]);
 
     useEffect(() => {
         if (!currentUser || !hasUnsaved) return;
         if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
         autoSaveTimer.current = setTimeout(() => {
-            fbSaveParticipant({ name: currentUser, predictions: preds, groupsLocked, knockoutLocked });
+            let finalKnockout = knockoutLocked;
+            if (groupsLocked && !knockoutLocked && isKnockoutComplete()) {
+                finalKnockout = true;
+                setKnockoutLocked(true);
+                addToast('\uD83D\uDD12 Eliminatoria completa \u2014 bloqueada autom\u00e1ticamente', 'success');
+            }
+            fbSaveParticipant({ name: currentUser, predictions: preds, groupsLocked, knockoutLocked: finalKnockout });
             setHasUnsaved(false); addToast('Auto-guardado completado', 'success');
         }, 2000);
         return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
@@ -1176,6 +1317,7 @@ function App() {
                     if (typeof updated.ga === 'number' && typeof updated.gb === 'number' && updated.ga !== updated.gb) { delete updated.winner; }
                 }
                 const newState = { ...prev, [id]: updated };
+                const _t=participants.map(pt=>({n:pt.name,t:getScoreBreakdown(pt.predictions).total})).sort((a,b)=>b.t-a.t);const _s={};_t.forEach((s,i)=>_s[safeName(s.n)]=i+1);db.ref('previousRanking').set(_s);
                 fbSaveOfficial(newState);
                 return newState;
             });
@@ -1280,7 +1422,8 @@ function App() {
         const name = newUserName.trim();
         if (!name) { addToast('Ingresá un nombre', 'error'); return; }
         if (participants.find(p => p.name === name)) { addToast('Ese nombre ya existe', 'error'); return; }
-        fbSaveParticipant({ name, predictions: {}, groupsLocked: false });
+        if (name.trim() === ADMIN_USER) { addToast('Nombre reservado', 'error'); return; }
+        fbSaveParticipant({ name, predictions: {}, groupsLocked: false, knockoutLocked: false });
         setCurrentUser(name); setPreds({}); setGroupsLocked(false); setShowNewUserModal(false); setNewUserName('');
         addToast(`¡Bienvenido/a ${name}!`, 'success');
     };
@@ -1337,20 +1480,46 @@ function App() {
                                     <p className="text-slate-700 text-sm mt-2">Agregá jugadores desde la pestaña Admin</p>
                                 </div>
                             ) : (
-                                <div className="space-y-4 md:space-y-6">
-                                    {ranking.filter(p => !searchQuery || p.name.toLowerCase().includes(searchQuery.toLowerCase())).map((p, i) => (
-                                        <div key={p.name} className="leaderboard-row bg-white/5 border border-white/5 p-6 md:p-8 rounded-2xl md:rounded-[2.5rem] flex justify-between items-center transition-all hover:bg-white/10 hover:border-white/10" style={{ animationDelay: (i * 0.08) + 's' }}>
-                                            <div className="flex items-center gap-4 md:gap-8">
-                                                <span className={`text-3xl md:text-5xl font-black italic tracking-tighter ${i === 0 ? 'text-[#deff9a]' : i < 3 ? 'text-slate-500' : 'text-slate-800'}`}>{i < 3 ? medals[i] : (i + 1)}</span>
-                                                <span className="font-black text-xl md:text-3xl text-white uppercase">{p.name}</span>
-                                            </div>
-                                            <div className="text-right">
-                                                <span className="text-4xl md:text-7xl font-black text-[#deff9a] leading-none tracking-tighter">{p.pts}</span>
-                                                <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em] block mt-2">PUNTOS</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
+                                <div className="overflow-x-auto -mx-4 md:-mx-8">
+                <table className="w-full text-left min-w-[1100px]">
+                    <thead>
+                        <tr className="text-[8px] md:text-[9px] text-[#deff9a] uppercase font-black tracking-widest border-b-2 border-[#deff9a]/20">
+                            <th className="p-2 sticky left-0 bg-[#0a0f1a] z-10 w-8">#</th>
+                            <th className="p-1 text-center w-10"></th>
+                            <th className="p-2 sticky left-8 bg-[#0a0f1a] z-10 min-w-[90px]">Nombre</th>
+                            <th className="p-2 text-center text-white text-xs">Pts</th>
+                            {Object.keys(EQUIPOS_POR_GRUPO).map(g => <th key={g} className="p-1 text-center text-slate-500 border-l border-white/5">{g}</th>)}
+                            <th className="p-1 text-center border-l-2 border-[#deff9a]/20" title="Dieciseisavos">16°</th>
+                            <th className="p-1 text-center" title="Octavos">8°</th>
+                            <th className="p-1 text-center" title="Cuartos">4°</th>
+                            <th className="p-1 text-center" title="Semis">SF</th>
+                            <th className="p-1 text-center" title="Final">F</th>
+                            <th className="p-1 text-center text-purple-400 border-l border-white/5" title="Tercer puesto">3°</th>
+                            <th className="p-1 text-center text-yellow-400" title="Campeón">{'\uD83C\uDFC6'}</th>
+                            <th className="p-2 text-center border-l-2 border-[#deff9a]/20">% Acierto</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {ranking.filter(p => !searchQuery || p.name.toLowerCase().includes(searchQuery.toLowerCase())).map((p, i) => (
+                        <tr key={p.name} className={`border-t border-white/5 transition-colors hover:bg-white/5 ${i < 3 ? 'bg-[#deff9a]/[0.03]' : ''}`}>
+                            <td className={`p-2 sticky left-0 bg-[#0a0f1a] z-10 font-black text-base ${i===0?'text-[#deff9a]':i<3?'text-slate-400':'text-slate-700'}`}>{i<3?medals[i]:(i+1)}</td>
+                            <td className="p-1 text-center text-[10px] font-black whitespace-nowrap">{(()=>{const pK=safeName(p.name);const pv=prevRanking[pK];if(typeof pv!=='number')return <span className="text-slate-600">{String.fromCharCode(9670)} 0</span>;const d=pv-(i+1);if(d>0)return <span className="text-green-400">{String.fromCharCode(9650)} {d}</span>;if(d<0)return <span className="text-red-400">{String.fromCharCode(9660)} {Math.abs(d)}</span>;return <span className="text-yellow-500">{String.fromCharCode(9670)} 0</span>;})()}</td>
+                            <td className="p-2 sticky left-8 bg-[#0a0f1a] z-10 font-black text-xs text-white truncate max-w-[110px]">{p.name}</td>
+                            <td className="p-2 text-center font-black text-[#deff9a] text-lg">{p.total}</td>
+                            {Object.keys(EQUIPOS_POR_GRUPO).map(g => <td key={g} className={`p-1 text-center text-[11px] font-bold border-l border-white/5 ${p.groups[g]>0?'text-slate-300':'text-slate-700'}`}>{p.groups[g]}</td>)}
+                            <td className={`p-1 text-center text-[11px] font-bold border-l-2 border-[#deff9a]/20 ${p.dieciseisavos>0?'text-blue-400':'text-slate-700'}`}>{p.dieciseisavos}</td>
+                            <td className={`p-1 text-center text-[11px] font-bold ${p.octavos>0?'text-blue-400':'text-slate-700'}`}>{p.octavos}</td>
+                            <td className={`p-1 text-center text-[11px] font-bold ${p.cuartos>0?'text-blue-400':'text-slate-700'}`}>{p.cuartos}</td>
+                            <td className={`p-1 text-center text-[11px] font-bold ${p.semis>0?'text-blue-400':'text-slate-700'}`}>{p.semis}</td>
+                            <td className={`p-1 text-center text-[11px] font-bold ${p.final_>0?'text-blue-400':'text-slate-700'}`}>{p.final_}</td>
+                            <td className={`p-1 text-center text-[11px] font-bold border-l border-white/5 ${p.tercero>0?'text-purple-400':'text-slate-700'}`}>{p.tercero}</td>
+                            <td className={`p-1 text-center text-[11px] font-bold ${p.campeon>0?'text-yellow-400':'text-slate-700'}`}>{p.campeon}</td>
+                            <td className={`p-2 text-center font-black text-xs border-l-2 border-[#deff9a]/20 ${p.efficiency>=50?'text-green-400':p.efficiency>=30?'text-yellow-400':'text-slate-400'}`}>{p.efficiency}%</td>
+                        </tr>
+                        ))}
+                    </tbody>
+                </table>
+                </div>
                             )}
                         </div>
                     </div>
@@ -1465,51 +1634,16 @@ function App() {
                             </div>
                         </div>
                         
-                        <div className="glass p-8 md:p-12 rounded-[2rem] md:rounded-[3.5rem] border border-yellow-500/10">
-                            <h3 className="text-2xl md:text-4xl font-black text-yellow-400 italic uppercase mb-8 md:mb-10"><i className="fa-solid fa-diagram-project mr-3"></i>Cruces Reales — Dieciseisavos</h3>
-                            <p className="text-slate-500 text-sm mb-6">Cargá los cruces reales (M73–M88). Esto define los equipos que verán los usuarios en Dieciseisavos.</p>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {Array.from({length:16}, (_,i)=>`M${73+i}`).map(mid => {
-                                    const row = r32Matchups?.[mid] || {a:'TBD',b:'TBD'};
-                                    return (
-                                        <div key={mid} className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800">
-                                            <div className="flex items-center justify-between mb-3">
-                                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{mid}</span>
-                                                <span className="text-[10px] font-black text-yellow-400 uppercase tracking-widest">Cruce real</span>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <select value={row.a || 'TBD'} onChange={e=>setR32Matchups(prev=>({...(prev||{}),[mid]:{...(prev?.[mid]||{}),a:e.target.value}}))} className="bg-slate-950 border border-slate-800 p-3 rounded-xl text-white font-bold outline-none focus:border-yellow-400">
-                                                    <option value="TBD">TBD</option>
-                                                    {ALL_TEAMS.map(t=> <option key={t} value={t}>{t}</option>)}
-                                                </select>
-                                                <select value={row.b || 'TBD'} onChange={e=>setR32Matchups(prev=>({...(prev||{}),[mid]:{...(prev?.[mid]||{}),b:e.target.value}}))} className="bg-slate-950 border border-slate-800 p-3 rounded-xl text-white font-bold outline-none focus:border-yellow-400">
-                                                    <option value="TBD">TBD</option>
-                                                    {ALL_TEAMS.map(t=> <option key={t} value={t}>{t}</option>)}
-                                                </select>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                            <div className="mt-6 flex flex-col md:flex-row gap-3 justify-end">
-                                <button onClick={()=>{ fbSaveR32Matchups(r32Matchups||{}); addToast('Cruces guardados', 'success'); }} className="bg-yellow-500 hover:bg-yellow-400 text-black px-8 py-4 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2">
-                                    <i className="fa-solid fa-floppy-disk"></i> Guardar Cruces
-                                </button>
-                                <button onClick={()=>{ if(window.confirm('¿Limpiar todos los cruces?')){ setR32Matchups({}); fbSaveR32Matchups({}); addToast('Cruces limpiados', 'warn'); } }} className="bg-slate-800 hover:bg-slate-700 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2">
-                                    <i className="fa-solid fa-eraser"></i> Limpiar
-                                </button>
-                            </div>
-                        </div>
-
-<div className="glass p-8 md:p-12 rounded-[2rem] md:rounded-[3.5rem] border border-red-500/10">
+                        <div className="glass p-8 md:p-12 rounded-[2rem] md:rounded-[3.5rem] border border-red-500/10">
                             <h3 className="text-2xl md:text-4xl font-black text-red-500 italic uppercase mb-8 md:mb-12"><i className="fa-solid fa-clipboard-check mr-3"></i>Resultados Oficiales</h3>
-                            <PredictionView matches={matches} currentPreds={officialResults} updateFn={(id, f, v) => handleUpdate(id, f, v, true)} isOfficial={true} groupsLocked={true} r32Matchups={r32Matchups} knockoutLocked={false} onLockKnockout={()=>{}} />
+                            <StatsDashboard preds={officialResults} matches={matches} groupsLocked={true} />
+                        <PredictionView matches={matches} currentPreds={officialResults} updateFn={(id, f, v) => handleUpdate(id, f, v, true)} isOfficial={true} groupsLocked={true} r32Matchups={r32Matchups} knockoutLocked={false} onLockKnockout={()=>{}} />
                         </div>
                     </div>
                 )}
             </main>
             <footer className="max-w-7xl mx-auto px-6 mt-20 py-10 border-t border-white/5 text-center">
-                <p className="text-slate-700 text-xs font-bold uppercase tracking-widest">PRODE 26 · Mundial FIFA 2026 · Pasión o Razón · v7 🔥 Firebase (clean)</p>
+                <p className="text-slate-700 text-xs font-bold uppercase tracking-widest">PRODE 26 · Mundial FIFA 2026 · Pasión o Razón · v7 🔥 Firebase FINAL</p>
             </footer>
         </div>
     );

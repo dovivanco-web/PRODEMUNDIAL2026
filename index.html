@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PRODE Mundial 2026 - Pasión o Razón v7 Firebase FINAL</title>
+    <title>PRODE Mundial 2026 - Pasión o Razón v10</title>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
@@ -141,9 +142,10 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const safeName = (n) => (n || '').replace(/[.#$\/\[\]]/g, '_');
-const fbSaveParticipant = (p) => db.ref('participants/' + safeName(p.name)).set(p);
+const fbSaveParticipant = (p) => db.ref('participants/' + safeName(p.name)).update(p);
 const fbRemoveParticipant = (name) => db.ref('participants/' + safeName(name)).remove();
 const fbSaveOfficial = (data) => db.ref('officialResults').set(data);
+const fbSaveGroupOverrides = (data) => db.ref('groupOverrides').set(data || {});
 
 // ═══ ADMIN + R32 MATCHUPS (v7 FINAL) ═══
 const ADMIN_USER = "Damián";
@@ -214,6 +216,7 @@ const sha256 = (ascii) => {
 const verifyAdminPin = (pin) => sha256(pin || '') === ADMIN_PIN_HASH;
 const fbSaveR32Matchups = (matchups) => db.ref('r32Matchups').set(matchups || {});
 const ALL_TEAMS = ([]).concat(...Object.values(EQUIPOS_POR_GRUPO));
+const GROUP_DEADLINE = new Date('2026-06-11T00:00:00-03:00');
 
 
 const copyToClipboard = async (text) => {
@@ -225,22 +228,79 @@ const copyToClipboard = async (text) => {
 };
 
 const getStandings = (grupo, matches, currentPreds) => {
-    const teams = EQUIPOS_POR_GRUPO[grupo];
-    let table = teams.map(t => ({ name: t, pj: 0, pg: 0, pe: 0, pp: 0, gf: 0, gc: 0, dg: 0, pts: 0 }));
-    matches.filter(m => m.group === grupo).forEach(m => {
-        const p = currentPreds[m.id];
-        if (p && typeof p.ga === 'number' && typeof p.gb === 'number') {
-            const tA = table.find(t => t.name === m.teamA);
-            const tB = table.find(t => t.name === m.teamB);
-            if (!tA || !tB) return;
-            tA.pj++; tB.pj++; tA.gf += p.ga; tB.gf += p.gb; tA.gc += p.gb; tB.gc += p.ga;
-            if (p.ga > p.gb) { tA.pg++; tA.pts += 3; tB.pp++; }
-            else if (p.ga < p.gb) { tB.pg++; tB.pts += 3; tA.pp++; }
-            else { tA.pe++; tB.pe++; tA.pts += 1; tB.pts += 1; }
-            tA.dg = tA.gf - tA.gc; tB.dg = tB.gf - tB.gc;
-        }
-    });
-    return table.sort((a, b) => b.pts - a.pts || b.dg - a.dg || b.gf - a.gf);
+ const teams = EQUIPOS_POR_GRUPO[grupo];
+ let table = teams.map(t => ({ name: t, pj: 0, pg: 0, pe: 0, pp: 0, gf: 0, gc: 0, dg: 0, pts: 0 }));
+ const groupMatches = matches.filter(m => m.group === grupo);
+ groupMatches.forEach(m => {
+ const p = currentPreds[m.id];
+ if (p && typeof p.ga === 'number' && typeof p.gb === 'number') {
+ const tA = table.find(t => t.name === m.teamA);
+ const tB = table.find(t => t.name === m.teamB);
+ if (!tA || !tB) return;
+ tA.pj++; tB.pj++; tA.gf += p.ga; tB.gf += p.gb; tA.gc += p.gb; tB.gc += p.ga;
+ if (p.ga > p.gb) { tA.pg++; tA.pts += 3; tB.pp++; }
+ else if (p.ga < p.gb) { tB.pg++; tB.pts += 3; tA.pp++; }
+ else { tA.pe++; tB.pe++; tA.pts += 1; tB.pts += 1; }
+ tA.dg = tA.gf - tA.gc; tB.dg = tB.gf - tB.gc;
+ }
+ });
+ const getH2H = (names) => {
+ const hh = {};
+ names.forEach(n => { hh[n] = { pts: 0, gf: 0, gc: 0, dg: 0 }; });
+ groupMatches.forEach(m => {
+ const p = currentPreds[m.id];
+ if (!p || typeof p.ga !== 'number' || typeof p.gb !== 'number') return;
+ if (names.indexOf(m.teamA) < 0 || names.indexOf(m.teamB) < 0) return;
+ if (p.ga > p.gb) hh[m.teamA].pts += 3;
+ else if (p.ga < p.gb) hh[m.teamB].pts += 3;
+ else { hh[m.teamA].pts += 1; hh[m.teamB].pts += 1; }
+ hh[m.teamA].gf += p.ga; hh[m.teamA].gc += p.gb;
+ hh[m.teamB].gf += p.gb; hh[m.teamB].gc += p.ga;
+ });
+ names.forEach(n => { hh[n].dg = hh[n].gf - hh[n].gc; });
+ return hh;
+ };
+ const resolveTied = (tied) => {
+ if (tied.length <= 1) return tied;
+ const names = tied.map(t => t.name);
+ const h2h = getH2H(names);
+ tied.sort((a, b) => {
+ const ha = h2h[a.name], hb = h2h[b.name];
+ return (hb.pts - ha.pts) || (hb.dg - ha.dg) || (hb.gf - ha.gf);
+ });
+ const res = [];
+ let si = 0;
+ while (si < tied.length) {
+ let sj = si + 1;
+ const hi = h2h[tied[si].name];
+ while (sj < tied.length) {
+ const hj = h2h[tied[sj].name];
+ if (hi.pts === hj.pts && hi.dg === hj.dg && hi.gf === hj.gf) sj++;
+ else break;
+ }
+ if (sj - si > 1 && sj - si < tied.length) {
+ res.push(...resolveTied(tied.slice(si, sj)));
+ } else {
+ for (let k = si; k < sj; k++) res.push(tied[k]);
+ }
+ si = sj;
+ }
+ return res;
+ };
+ table.sort((a, b) => b.pts - a.pts || b.dg - a.dg || b.gf - a.gf);
+ const final = [];
+ let i = 0;
+ while (i < table.length) {
+ let j = i + 1;
+ while (j < table.length && table[j].pts === table[i].pts && table[j].dg === table[i].dg && table[j].gf === table[i].gf) j++;
+ if (j - i > 1) {
+ final.push(...resolveTied(table.slice(i, j)));
+ } else {
+ final.push(table[i]);
+ }
+ i = j;
+ }
+ return final;
 };
 
 const ANNEXE_C_RAW = "EJIFHGLK,HGIDJFLK,EJIDHGLK,EJIDHFLK,EGIDJFLK,EGJDHFLK,EGIDHFLK,EGJDHFLI,EGJDHFIK,HGICJFLK,EJICHGLK,EJICHFLK,EGICJFLK,EGJCHFLK,EGICHFLK,EGJCHFLI,EGJCHFIK,HGICJDLK,CJIDHFLK,CGIDJFLK,CGJDHFLK,CGIDHFLK,CGJDHFLI,CGJDHFIK,EJICHDLK,EGICJDLK,EGJCHDLK,EGICHDLK,EGJCHDLI,EGJCHDIK,CJEDIFLK,CJEDHFLK,CEIDHFLK,CJEDHFLI,CJEDHFIK,CGEDJFLK,CGEDIFLK,CGEDJFLI,CGEDJFIK,CGEDHFLK,CGJDHFLE,CGJDHFEK,CGEDHFLI,CGEDHFIK,CGJDHFEI,HJBFIGLK,EJIBHGLK,EJBFIHLK,EJBFIGLK,EJBFHGLK,EGBFIHLK,EJBFHGLI,EJBFHGIK,HJBDIGLK,HJBDIFLK,IGBDJFLK,HGBDJFLK,HGBDIFLK,HGBDJFLI,HGBDJFIK,EJBDIHLK,EJBDIGLK,EJBDHGLK,EGBDIHLK,EJBDHGLI,EJBDHGIK,EJBDIFLK,EJBDHFLK,EIBDHFLK,EJBDHFLI,EJBDHFIK,EGBDJFLK,EGBDIFLK,EGBDJFLI,EGBDJFIK,EGBDHFLK,HGBDJFLE,HGBDJFEK,EGBDHFLI,EGBDHFIK,HGBDJFEI,HJBCIGLK,HJBCIFLK,IGBCJFLK,HGBCJFLK,HGBCIFLK,HGBCJFLI,HGBCJFIK,EJBCIHLK,EJBCIGLK,EJBCHGLK,EGBCIHLK,EJBCHGLI,EJBCHGIK,EJBCIFLK,EJBCHFLK,EIBCHFLK,EJBCHFLI,EJBCHFIK,EGBCJFLK,EGBCIFLK,EGBCJFLI,EGBCJFIK,EGBCHFLK,HGBCJFLE,HGBCJFEK,EGBCHFLI,EGBCHFIK,HGBCJFEI,HJBCIDLK,IGBCJDLK,HGBCJDLK,HGBCIDLK,HGBCJDLI,HGBCJDIK,CJBDIFLK,CJBDHFLK,CIBDHFLK,CJBDHFLI,CJBDHFIK,CGBDJFLK,CGBDIFLK,CGBDJFLI,CGBDJFIK,CGBDHFLK,CGBDHFLJ,HGBCJFDK,CGBDHFLI,CGBDHFIK,HGBCJFDI,EJBCIDLK,EJBCHDLK,EIBCHDLK,EJBCHDLI,EJBCHDIK,EGBCJDLK,EGBCIDLK,EGBCJDLI,EGBCJDIK,EGBCHDLK,HGBCJDLE,HGBCJDEK,EGBCHDLI,EGBCHDIK,HGBCJDEI,CJBDEFLK,CEBDIFLK,CJBDEFLI,CJBDEFIK,CEBDHFLK,CJBDHFLE,CJBDHFEK,CEBDHFLI,CEBDHFIK,CJBDHFEI,CGBDEFLK,CGBDJFLE,CGBDJFEK,CGBDEFLI,CGBDEFIK,CGBDJFEI,CGBDHFLE,CGBDHFEK,HGBCJFDE,CGBDHFEI,HJIFAGLK,EJIAHGLK,EJIFAHLK,EJIFAGLK,EGJFAHLK,EGIFAHLK,EGJFAHLI,EGJFAHIK,HJIDAGLK,HJIDAFLK,IGJDAFLK,HGJDAFLK,HGIDAFLK,HGJDAFLI,HGJDAFIK,EJIDAHLK,EJIDAGLK,EGJDAHLK,EGIDAHLK,EGJDAHLI,EGJDAHIK,EJIDAFLK,HJEDAFLK,HEIDAFLK,HJEDAFLI,HJEDAFIK,EGJDAFLK,EGIDAFLK,EGJDAFLI,EGJDAFIK,HGEDAFLK,HGJDAFLE,HGJDAFEK,HGEDAFLI,HGEDAFIK,HGJDAFEI,HJICAGLK,HJICAFLK,IGJCAFLK,HGJCAFLK,HGICAFLK,HGJCAFLI,HGJCAFIK,EJICAHLK,EJICAGLK,EGJCAHLK,EGICAHLK,EGJCAHLI,EGJCAHIK,EJICAFLK,HJECAFLK,HEICAFLK,HJECAFLI,HJECAFIK,EGJCAFLK,EGICAFLK,EGJCAFLI,EGJCAFIK,HGECAFLK,HGJCAFLE,HGJCAFEK,HGECAFLI,HGECAFIK,HGJCAFEI,HJICADLK,IGJCADLK,HGJCADLK,HGICADLK,HGJCADLI,HGJCADIK,CJIDAFLK,HJFCADLK,HFICADLK,HJFCADLI,HJFCADIK,CGJDAFLK,CGIDAFLK,CGJDAFLI,CGJDAFIK,HGFCADLK,CGJDAFLH,HGJCAFDK,HGFCADLI,HGFCADIK,HGJCAFDI,EJICADLK,HJECADLK,HEICADLK,HJECADLI,HJECADIK,EGJCADLK,EGICADLK,EGJCADLI,EGJCADIK,HGECADLK,HGJCADLE,HGJCADEK,HGECADLI,HGECADIK,HGJCADEI,CJEDAFLK,CEIDAFLK,CJEDAFLI,CJEDAFIK,HEFCADLK,HJFCADLE,HJECAFDK,HEFCADLI,HEFCADIK,HJECAFDI,CGEDAFLK,CGJDAFLE,CGJDAFEK,CGEDAFLI,CGEDAFIK,CGJDAFEI,HGFCADLE,HGECAFDK,HGJCAFDE,HGECAFDI,HJBAIGLK,HJBAIFLK,IJBFAGLK,HJBFAGLK,HGBAIFLK,HJBFAGLI,HJBFAGIK,EJBAIHLK,EJBAIGLK,EJBAHGLK,EGBAIHLK,EJBAHGLI,EJBAHGIK,EJBAIFLK,EJBFAHLK,EIBFAHLK,EJBFAHLI,EJBFAHIK,EJBFAGLK,EGBAIFLK,EJBFAGLI,EJBFAGIK,EGBFAHLK,HJBFAGLE,HJBFAGEK,EGBFAHLI,EGBFAHIK,HJBFAGEI,IJBDAHLK,IJBDAGLK,HJBDAGLK,IGBDAHLK,HJBDAGLI,HJBDAGIK,IJBDAFLK,HJBDAFLK,HIBDAFLK,HJBDAFLI,HJBDAFIK,FJBDAGLK,IGBDAFLK,FJBDAGLI,FJBDAGIK,HGBDAFLK,HGBDAFLJ,HGBDAFJK,HGBDAFLI,HGBDAFIK,HGBDAFIJ,EJBAIDLK,EJBDAHLK,EIBDAHLK,EJBDAHLI,EJBDAHIK,EJBDAGLK,EGBAIDLK,EJBDAGLI,EJBDAGIK,EGBDAHLK,HJBDAGLE,HJBDAGEK,EGBDAHLI,EGBDAHIK,HJBDAGEI,EJBDAFLK,EIBDAFLK,EJBDAFLI,EJBDAFIK,HEBDAFLK,HJBDAFLE,HJBDAFEK,HEBDAFLI,HEBDAFIK,HJBDAFEI,EGBDAFLK,EGBDAFLJ,EGBDAFJK,EGBDAFLI,EGBDAFIK,EGBDAFIJ,HGBDAFLE,HGBDAFEK,HGBDAFEJ,HGBDAFEI,IJBCAHLK,IJBCAGLK,HJBCAGLK,IGBCAHLK,HJBCAGLI,HJBCAGIK,IJBCAFLK,HJBCAFLK,HIBCAFLK,HJBCAFLI,HJBCAFIK,CJBFAGLK,IGBCAFLK,CJBFAGLI,CJBFAGIK,HGBCAFLK,HGBCAFLJ,HGBCAFJK,HGBCAFLI,HGBCAFIK,HGBCAFIJ,EJBAICLK,EJBCAHLK,EIBCAHLK,EJBCAHLI,EJBCAHIK,EJBCAGLK,EGBAICLK,EJBCAGLI,EJBCAGIK,EGBCAHLK,HJBCAGLE,HJBCAGEK,EGBCAHLI,EGBCAHIK,HJBCAGEI,EJBCAFLK,EIBCAFLK,EJBCAFLI,EJBCAFIK,HEBCAFLK,HJBCAFLE,HJBCAFEK,HEBCAFLI,HEBCAFIK,HJBCAFEI,EGBCAFLK,EGBCAFLJ,EGBCAFJK,EGBCAFLI,EGBCAFIK,EGBCAFIJ,HGBCAFLE,HGBCAFEK,HGBCAFEJ,HGBCAFEI,IJBCADLK,HJBCADLK,HIBCADLK,HJBCADLI,HJBCADIK,CJBDAGLK,IGBCADLK,CJBDAGLI,CJBDAGIK,HGBCADLK,HGBCADLJ,HGBCADJK,HGBCADLI,HGBCADIK,HGBCADIJ,CJBDAFLK,CIBDAFLK,CJBDAFLI,CJBDAFIK,HFBCADLK,CJBDAFLH,HJBCAFDK,HFBCADLI,HFBCADIK,HJBCAFDI,CGBDAFLK,CGBDAFLJ,CGBDAFJK,CGBDAFLI,CGBDAFIK,CGBDAFIJ,CGBDAFLH,HGBCAFDK,HGBCAFDJ,HGBCAFDI,EJBCADLK,EIBCADLK,EJBCADLI,EJBCADIK,HEBCADLK,HJBCADLE,HJBCADEK,HEBCADLI,HEBCADIK,HJBCADEI,EGBCADLK,EGBCADLJ,EGBCADJK,EGBCADLI,EGBCADIK,EGBCADIJ,HGBCADLE,HGBCADEK,HGBCADEJ,HGBCADEI,CEBDAFLK,CJBDAFLE,CJBDAFEK,CEBDAFLI,CEBDAFIK,CJBDAFEI,HFBCADLE,HEBCAFDK,HJBCAFDE,HEBCAFDI,CGBDAFLE,CGBDAFEK,CGBDAFEJ,CGBDAFEI,HGBCAFDE";
@@ -250,10 +310,26 @@ ANNEXE_C_RAW.split(',').forEach(s => {
     if (!ANNEXE_C[key]) ANNEXE_C[key] = s;
 });
 
-const getFlow = (currentPreds, matches, r32Override) => {
+const getFlow = (currentPreds, matches, r32Override, groupOvr) => {
     const std = {};
-    Object.keys(EQUIPOS_POR_GRUPO).forEach(g => std[g] = getStandings(g, matches, currentPreds));
-    const thirds = Object.keys(std).map(g => ({ ...std[g][2], group: g })).sort((a,b) => b.pts - a.pts || b.dg - a.dg || b.gf - a.gf);
+    Object.keys(EQUIPOS_POR_GRUPO).forEach(g => {
+    std[g] = getStandings(g, matches, currentPreds);
+    if (groupOvr && groupOvr[g]) {
+    const ov = groupOvr[g];
+    const re = [];
+    ov.forEach(nm => { const t = std[g].find(x => x.name === nm); if (t) re.push(t); });
+    std[g].forEach(t => { if (!re.find(x => x.name === t.name)) re.push(t); });
+    if (re.length === std[g].length) std[g] = re;
+    }
+    });
+    let thirds = Object.keys(std).map(g => ({ ...std[g][2], group: g })).sort((a,b) => b.pts - a.pts || b.dg - a.dg || b.gf - a.gf);
+    if (groupOvr && groupOvr._thirds) {
+    const ovt = groupOvr._thirds;
+    const re = [];
+    ovt.forEach(grp => { const t = thirds.find(x => x.group === grp); if (t) re.push(t); });
+    thirds.forEach(t => { if (!re.find(x => x.group === t.group)) re.push(t); });
+    if (re.length === thirds.length) thirds = re;
+    }
     const best8 = thirds.slice(0, 8);
     const annexeKey = best8.map(t => t.group).sort().join('');
     const annexeRow = ANNEXE_C[annexeKey] || null;
@@ -337,7 +413,7 @@ const getFlow = (currentPreds, matches, r32Override) => {
     d['M104'] = { a: getWinner('M101', d['M101']?.a, d['M101']?.b), b: getWinner('M102', d['M102']?.a, d['M102']?.b) };
     d._champion = getWinner('M104', d['M104']?.a, d['M104']?.b);
     d._third = getWinner('M103', d['M103']?.a, d['M103']?.b);
-    return { ...d, best8, std };
+    return { ...d, best8, allThirds: thirds, std };
 };
 
 const getTeamsInPhase = (flow, matches, phase) => {
@@ -350,6 +426,21 @@ const getTeamsInPhase = (flow, matches, phase) => {
         }
     });
     return teams;
+};
+
+const FIRST_MATCH = new Date('2026-06-11T15:00:00-03:00');
+const Countdown = () => {
+const [now, setNow] = React.useState(new Date());
+useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
+const diff = FIRST_MATCH - now;
+if (diff <= 0) return (<div className="text-center mt-3"><span className="text-[#deff9a] font-black text-sm uppercase tracking-widest animate-pulse">\u26BD \u00A1EL MUNDIAL COMENZ\u00D3! \u26BD</span></div>);
+const days = Math.floor(diff / 86400000);
+const hrs = Math.floor((diff % 86400000) / 3600000);
+const mins = Math.floor((diff % 3600000) / 60000);
+const secs = Math.floor((diff % 60000) / 1000);
+return (<div className="flex items-center justify-center gap-4 mt-4">
+{[[days,'D\u00cdAS'],[hrs,'HRS'],[mins,'MIN'],[secs,'SEG']].map(([v,l],i)=>(<div key={i} className="flex flex-col items-center"><span className="text-2xl md:text-3xl font-black text-[#deff9a] tabular-nums">{String(v).padStart(2,'0')}</span><span className="text-[7px] font-black text-slate-600 uppercase tracking-widest">{l}</span></div>))}
+</div>);
 };
 
 const Confetti = () => {
@@ -424,6 +515,7 @@ const RulesSection = memo(() => {
                             <li>• <strong className="text-white">Etapa 1:</strong> Completá los pronósticos de todos los grupos</li>
                             <li>• Una vez completa, <strong className="text-red-400">bloqueá la fase de grupos</strong> (no podrás modificarla)</li>
                             <li>• <strong className="text-white">Etapa 2:</strong> Completá los cruces de la fase eliminatoria</li>
+<li>• <strong className="text-red-400">⚠️ Bloqueo automático:</strong> El <strong className="text-white">11 de junio de 2026</strong> se bloquean los grupos automáticamente. ¡Completá antes!</li>
                         </ul>
                     </div>
                     <div className="bg-slate-900/60 rounded-2xl p-6 border border-slate-800/50">
@@ -688,8 +780,8 @@ const PlayoffWinnerRow = memo(({ m, teamA, teamB, preds, onUpdate, disabled }) =
     );
 });
 
-const PredictionView = memo(({ matches, currentPreds, updateFn, isOfficial, groupsLocked, onLockGroups, r32Matchups, knockoutLocked, onLockKnockout }) => {
-    const flow = useMemo(() => getFlow(currentPreds, matches, r32Matchups), [matches, currentPreds, r32Matchups]);
+const PredictionView = memo(({ matches, currentPreds, updateFn, isOfficial, groupsLocked, onLockGroups, r32Matchups, knockoutLocked, onLockKnockout, groupOverrides, onReorderGroup }) => {
+    const flow = useMemo(() => getFlow(currentPreds, matches, r32Matchups, isOfficial ? groupOverrides : null), [matches, currentPreds, r32Matchups, isOfficial, groupOverrides]);
     const [subPhase, setSubPhase] = useState('grupos');
     const [groupFilter, setGroupFilter] = useState('Todos');
     const allGroups = Object.keys(EQUIPOS_POR_GRUPO);
@@ -756,7 +848,7 @@ const PredictionView = memo(({ matches, currentPreds, updateFn, isOfficial, grou
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
                         {filteredGroups.map(g => (
                             <div key={g} className="bg-slate-900/20 border-t-4 border-[#deff9a] rounded-3xl p-6 md:p-8 shadow-xl view-enter">
-                                <h3 className="font-black text-2xl md:text-3xl italic uppercase mb-6 md:mb-8 group-header text-white">Grupo {g}</h3>
+                                <div className="flex items-center justify-between mb-6 md:mb-8 group-header"><h3 className="font-black text-2xl md:text-3xl italic uppercase text-white">Grupo {g}{groupOverrides && groupOverrides[g] && <span className="text-yellow-500 text-sm ml-2" title="Orden ajustado por admin">\u26A0</span>}</h3>{isOfficial && onReorderGroup && groupOverrides && groupOverrides[g] && <button onClick={()=>{const up={...groupOverrides};delete up[g];onReorderGroup(null,null,up);}} className="text-[9px] text-yellow-400 font-black uppercase border border-yellow-500/30 px-3 py-1.5 rounded-lg hover:bg-yellow-500/10 transition-colors"><i className="fa-solid fa-rotate-left mr-1"></i>Reset</button>}</div>
                                 <div className="space-y-3">
                                     {matches.filter(m => m.group === g).map(m => (<MatchRow key={m.id} m={m} preds={currentPreds} onUpdate={updateFn} matchIndex={groupMatchIdxMap[m.id]} disabled={groupsLocked && !isOfficial} />))}
                                 </div>
@@ -765,11 +857,13 @@ const PredictionView = memo(({ matches, currentPreds, updateFn, isOfficial, grou
                                         <thead><tr className="text-[9px] text-slate-500 uppercase font-black tracking-widest border-b border-white/5">
                                             <th className="pb-3 w-8">#</th><th className="pb-3">Selección</th>
                                             <th className="pb-3 text-center">PJ</th><th className="pb-3 text-center">PTS</th><th className="pb-3 text-center">DG</th><th className="pb-3 text-center">GF</th>
+{isOfficial && onReorderGroup && <th className="pb-3 w-8"></th>}
                                         </tr></thead>
                                         <tbody>
                                             {flow.std[g].map((t, i) => (
                                                 <tr key={t.name} className={`border-t border-white/5 ${i < 2 ? 'qualify-1' : i === 2 ? 'qualify-3' : ''}`}>
                                                     <td className="py-3 font-black text-slate-500">{i+1}</td>
+{isOfficial && onReorderGroup && <td className="py-1 text-center"><div className="flex flex-col"><button disabled={i===0} onClick={()=>{const order=flow.std[g].map(x=>x.name);const tmp=order[i];order[i]=order[i-1];order[i-1]=tmp;onReorderGroup(g,order);}} className="text-[10px] text-slate-500 hover:text-[#deff9a] disabled:opacity-20 disabled:cursor-not-allowed px-1"><i className="fa-solid fa-caret-up"></i></button><button disabled={i===flow.std[g].length-1} onClick={()=>{const order=flow.std[g].map(x=>x.name);const tmp=order[i];order[i]=order[i+1];order[i+1]=tmp;onReorderGroup(g,order);}} className="text-[10px] text-slate-500 hover:text-[#deff9a] disabled:opacity-20 disabled:cursor-not-allowed px-1"><i className="fa-solid fa-caret-down"></i></button></div></td>}
                                                     <td className="py-3 font-bold flex items-center gap-2 md:gap-3 text-xs md:text-sm">
                                                         <img src={`https://flagcdn.com/w40/${FLAGS[t.name] || 'un'}.png`} className="flag" alt={t.name} loading="lazy" />
                                                         <span className="truncate">{t.name}</span>
@@ -780,6 +874,7 @@ const PredictionView = memo(({ matches, currentPreds, updateFn, isOfficial, grou
                                                     <td className="py-3 text-center font-black text-[#deff9a] text-lg">{t.pts}</td>
                                                     <td className="py-3 text-center text-slate-500 font-bold">{t.dg > 0 ? '+' : ''}{t.dg}</td>
                                                     <td className="py-3 text-center text-slate-600 font-bold">{t.gf}</td>
+{isOfficial && onReorderGroup && <td></td>}
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -790,27 +885,34 @@ const PredictionView = memo(({ matches, currentPreds, updateFn, isOfficial, grou
                     </div>
                     {groupFilter === 'Todos' && (
                         <div className="glass p-8 md:p-12 rounded-[2rem] md:rounded-[3.5rem] border border-blue-500/20 mt-12 md:mt-20">
-                            <h3 className="text-2xl md:text-4xl font-black text-blue-400 italic uppercase mb-8 md:mb-10 tracking-tighter">
-                                <i className="fa-solid fa-ranking-star mr-3"></i>Mejores Terceros
+                            <div className="flex items-center justify-between mb-8 md:mb-10">
+                            <h3 className="text-2xl md:text-4xl font-black text-blue-400 italic uppercase tracking-tighter">
+                                <i className="fa-solid fa-ranking-star mr-3"></i>Mejores Terceros{groupOverrides && groupOverrides._thirds && <span className="text-yellow-500 text-base ml-2" title="Orden ajustado por admin">\u26A0</span>}
                             </h3>
+                            {isOfficial && onReorderGroup && groupOverrides && groupOverrides._thirds && <button onClick={()=>{const up={...groupOverrides};delete up._thirds;onReorderGroup(null,null,up);}} className="text-[9px] text-yellow-400 font-black uppercase border border-yellow-500/30 px-3 py-1.5 rounded-lg hover:bg-yellow-500/10 transition-colors"><i className="fa-solid fa-rotate-left mr-1"></i>Reset Terceros</button>}
+                            </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left">
                                     <thead><tr className="text-[10px] text-slate-500 uppercase font-black border-b border-white/5">
                                         <th className="p-3 md:p-4">Pos</th><th className="p-3 md:p-4">Equipo</th><th className="p-3 md:p-4 text-center">Grupo</th>
                                         <th className="p-3 md:p-4 text-center">PTS</th><th className="p-3 md:p-4 text-center">DG</th><th className="p-3 md:p-4 text-center">GF</th>
+{isOfficial && onReorderGroup && <th className="p-3 md:p-4 w-10"></th>}
                                     </tr></thead>
                                     <tbody>
-                                        {flow.best8.map((t, i) => (
-                                            <tr key={i} className={`border-t border-white/5 ${i < 8 ? 'bg-green-500/[0.03]' : 'opacity-30'}`}>
+                                        {(flow.allThirds || flow.best8).map((t, i) => (
+                                            <tr key={i} className={`border-t border-white/5 ${i < 8 ? 'bg-green-500/[0.03]' : 'opacity-40'}`}>
                                                 <td className="p-3 md:p-4 text-xs font-black text-slate-600">{i+1}</td>
                                                 <td className="p-3 md:p-4 font-bold flex items-center gap-3 md:gap-4 text-sm">
                                                     <img src={`https://flagcdn.com/w40/${FLAGS[t.name] || 'un'}.png`} className="flag" alt={t.name} loading="lazy" />
                                                     <span className="truncate">{t.name}</span>
+                                                    {i < 8 && <span className="text-[8px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded font-black ml-1">CLASIF</span>}
+                                                    {i >= 8 && <span className="text-[8px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded font-black ml-1">ELIM</span>}
                                                 </td>
                                                 <td className="p-3 md:p-4 text-center text-slate-400 font-black">{t.group}</td>
                                                 <td className="p-3 md:p-4 text-center font-black text-[#deff9a] text-xl">{t.pts}</td>
                                                 <td className="p-3 md:p-4 text-center text-slate-400 font-bold">{t.dg > 0 ? '+' : ''}{t.dg}</td>
                                                 <td className="p-3 md:p-4 text-center text-slate-500 font-bold">{t.gf}</td>
+{isOfficial && onReorderGroup && <td className="p-2 text-center"><div className="flex flex-col"><button disabled={i===0} onClick={()=>{const arr=(flow.allThirds||flow.best8).map(x=>x.group);const tmp=arr[i];arr[i]=arr[i-1];arr[i-1]=tmp;onReorderGroup(null,null,{...groupOverrides,_thirds:arr});}} className="text-[10px] text-slate-500 hover:text-[#deff9a] disabled:opacity-20 disabled:cursor-not-allowed px-1"><i className="fa-solid fa-caret-up"></i></button><button disabled={i===(flow.allThirds||flow.best8).length-1} onClick={()=>{const arr=(flow.allThirds||flow.best8).map(x=>x.group);const tmp=arr[i];arr[i]=arr[i+1];arr[i+1]=tmp;onReorderGroup(null,null,{...groupOverrides,_thirds:arr});}} className="text-[10px] text-slate-500 hover:text-[#deff9a] disabled:opacity-20 disabled:cursor-not-allowed px-1"><i className="fa-solid fa-caret-down"></i></button></div></td>}
                                             </tr>
                                         ))}
                                     </tbody>
@@ -943,13 +1045,20 @@ function App() {
     const [groupsLocked, setGroupsLocked] = useState(false);
     const [knockoutLocked, setKnockoutLocked] = useState(false);
     const [r32Matchups, setR32Matchups] = useState({});
+    const [groupOverrides, setGroupOverrides] = useState({});
     const [prevRanking, setPrevRanking] = useState({});
     const [hasUnsaved, setHasUnsaved] = useState(false);
     const [showConfetti, setShowConfetti] = useState(false);
+    const [showComparison, setShowComparison] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [adminUnlocked, setAdminUnlocked] = useState(false);
     const [showNewUserModal, setShowNewUserModal] = useState(false);
     const [newUserName, setNewUserName] = useState('');
+ const [newUserPin, setNewUserPin] = useState('');
+ const [newUserPinConfirm, setNewUserPinConfirm] = useState('');
+ const [showPinModal, setShowPinModal] = useState(false);
+ const [pendingUser, setPendingUser] = useState(null);
+ const [pinInput, setPinInput] = useState('');
     const autoSaveTimer = useRef(null);
     const { toasts, addToast, removeToast } = useToasts();
     const [fbLoaded, setFbLoaded] = useState(false);
@@ -1098,7 +1207,7 @@ function App() {
     const calculateTotalScore = useCallback((userP, userLocked) => {
         let pts = 0;
         if (!officialResults || Object.keys(officialResults).length === 0) return 0;
-        const oF = getFlow(officialResults, matches, r32Matchups);
+        const oF = getFlow(officialResults, matches, r32Matchups, groupOverrides);
         const uF = getFlow(userP || {}, matches, r32Matchups);
         matches.filter(m => m.phase === 'Grupos').forEach(m => {
             const o = officialResults[m.id];
@@ -1148,7 +1257,7 @@ function App() {
         const bd = {total:0, groups:{}, dieciseisavos:0, octavos:0, cuartos:0, semis:0, final_:0, tercero:0, campeon:0};
         Object.keys(EQUIPOS_POR_GRUPO).forEach(g => bd.groups[g]=0);
         if (!officialResults || Object.keys(officialResults).length===0) return bd;
-        const oF = getFlow(officialResults, matches, r32Matchups);
+        const oF = getFlow(officialResults, matches, r32Matchups, groupOverrides);
         const uF = getFlow(userP||{}, matches, r32Matchups);
         const allGD = Object.keys(EQUIPOS_POR_GRUPO).every(g=>matches.filter(mt=>mt.group===g).every(mt=>typeof officialResults[mt.id]?.ga==='number'));
         Object.keys(EQUIPOS_POR_GRUPO).forEach(g=>{
@@ -1187,7 +1296,7 @@ function App() {
         const allGD=Object.keys(EQUIPOS_POR_GRUPO).every(g=>matches.filter(m=>m.group===g).every(m=>typeof officialResults[m.id]?.ga==='number'));
         if(allGD){mx+=240+320;
             matches.filter(m=>m.phase==='Dieciseisavos').forEach(m=>{if(typeof officialResults[m.id]?.ga==='number') mx+=8;});
-            const oF=getFlow(officialResults,matches,r32Matchups);
+            const oF=getFlow(officialResults,matches,r32Matchups,groupOverrides);
             if(getTeamsInPhase(oF,matches,'Octavos').size>0) mx+=192;
             if(getTeamsInPhase(oF,matches,'Cuartos').size>0) mx+=120;
             if(getTeamsInPhase(oF,matches,'Semis').size>0) mx+=80;
@@ -1225,7 +1334,10 @@ function App() {
         const unsubPR = db.ref('previousRanking').on('value', snap => {
             setPrevRanking(snap.val() || {});
         });
-        return () => { db.ref('participants').off('value', unsubP); db.ref('officialResults').off('value', unsubO); db.ref('previousRanking').off('value', unsubPR); };
+        const unsubGO = db.ref('groupOverrides').on('value', snap => {
+            setGroupOverrides(snap.val() || {});
+        });
+        return () => { db.ref('participants').off('value', unsubP); db.ref('officialResults').off('value', unsubO); db.ref('previousRanking').off('value', unsubPR); db.ref('groupOverrides').off('value', unsubGO); };
     }, []);
 
     // Auto-compute R32 matchups from official results
@@ -1237,7 +1349,7 @@ function App() {
             return o && typeof o.ga === 'number' && typeof o.gb === 'number';
         });
         if (!allGroupsDone) return;
-        const officialFlow = getFlow(officialResults, matches, null);
+        const officialFlow = getFlow(officialResults, matches, null, groupOverrides);
         const computed = {};
         for (let i = 73; i <= 88; i++) {
             const mid = `M${i}`;
@@ -1324,7 +1436,17 @@ function App() {
         } else { setPreds(prev => ({ ...prev, [id]: { ...(prev[id] || {}), [field]: val } })); setHasUnsaved(true); }
     }, [groupsLocked]);
 
-    const handleLockGroups = useCallback(() => {
+    // Auto-lock groups by deadline
+useEffect(() => {
+if (!currentUser || groupsLocked) return;
+if (new Date() >= GROUP_DEADLINE) {
+setGroupsLocked(true);
+fbSaveParticipant({ name: currentUser, predictions: preds, groupsLocked: true, knockoutLocked });
+addToast('\uD83D\uDD12 Grupos bloqueados (inicio del mundial)', 'warn');
+}
+}, [currentUser, groupsLocked]);
+
+const handleLockGroups = useCallback(() => {
         if (window.confirm('¿Bloquear la fase de grupos? Una vez bloqueado, NO podrás modificar los pronósticos de grupos.')) {
             setGroupsLocked(true);
             fbSaveParticipant({ name: currentUser, predictions: preds, groupsLocked: true, knockoutLocked });
@@ -1419,15 +1541,72 @@ function App() {
         else { addToast('PIN incorrecto', 'error'); }
     };
     const handleCreateUser = () => {
-        const name = newUserName.trim();
-        if (!name) { addToast('Ingresá un nombre', 'error'); return; }
-        if (participants.find(p => p.name === name)) { addToast('Ese nombre ya existe', 'error'); return; }
-        if (name.trim() === ADMIN_USER) { addToast('Nombre reservado', 'error'); return; }
-        fbSaveParticipant({ name, predictions: {}, groupsLocked: false, knockoutLocked: false });
-        setCurrentUser(name); setPreds({}); setGroupsLocked(false); setShowNewUserModal(false); setNewUserName('');
-        addToast(`¡Bienvenido/a ${name}!`, 'success');
-    };
-    const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
+ const name = newUserName.trim();
+ if (!name) { addToast('Ingresá un nombre', 'error'); return; }
+ if (participants.find(p => p.name === name)) { addToast('Ese nombre ya existe', 'error'); return; }
+ 
+ if (!/^\d{6}$/.test(newUserPin)) { addToast('El PIN debe ser de exactamente 6 dígitos', 'error'); return; }
+ if (newUserPin !== newUserPinConfirm) { addToast('Los PINs no coinciden', 'error'); return; }
+ const pinHash = sha256(newUserPin);
+ fbSaveParticipant({ name, predictions: {}, groupsLocked: false, knockoutLocked: false, pinHash });
+ setCurrentUser(name); setPreds({}); setGroupsLocked(false); setKnockoutLocked(false);
+ setShowNewUserModal(false); setNewUserName(''); setNewUserPin(''); setNewUserPinConfirm('');
+ addToast(`¡Bienvenido/a ${name}!`, 'success');
+};
+const handlePinVerify = () => {
+ if (!pendingUser) return;
+ const u = participants.find(p => p.name === pendingUser);
+ if (!u) { addToast('Usuario no encontrado', 'error'); setShowPinModal(false); return; }
+ if (!u.pinHash) {
+  // Perfil legacy sin PIN: permite entrar y sugiere setear PIN
+  setCurrentUser(pendingUser);
+  setPreds(u.predictions || {}); setGroupsLocked(u.groupsLocked || false); setKnockoutLocked(u.knockoutLocked || false);
+  setHasUnsaved(false); setShowPinModal(false); setPendingUser(null); setPinInput('');
+  addToast('⚠️ Perfil sin PIN. Usá el botón PIN para protegerlo.', 'warn');
+  return;
+ }
+ if (sha256(pinInput) === u.pinHash) {
+  setCurrentUser(pendingUser);
+  setPreds(u.predictions || {}); setGroupsLocked(u.groupsLocked || false); setKnockoutLocked(u.knockoutLocked || false);
+  setHasUnsaved(false); setShowPinModal(false); setPendingUser(null); setPinInput('');
+  (() => {
+const curRank = ranking.findIndex(r => r.name === pendingUser) + 1;
+const prevPos = prevRanking[safeName(pendingUser)];
+if (curRank > 0 && typeof prevPos === 'number') {
+const diff = prevPos - curRank;
+if (diff > 0) addToast(`Bienvenido/a ${pendingUser} \uD83D\uDE80 Subiste ${diff} pos! (#${curRank})`, 'success');
+else if (diff < 0) addToast(`Bienvenido/a ${pendingUser} \u2B07\uFE0F Bajaste ${Math.abs(diff)} pos (#${curRank})`, 'warn');
+else addToast(`Bienvenido/a ${pendingUser} \u25C6 Mismo puesto (#${curRank})`, 'success');
+} else { addToast(`Bienvenido/a ${pendingUser}`, 'success'); }
+})();
+ } else {
+  addToast('PIN incorrecto', 'error'); setPinInput('');
+ }
+};
+const handleChangePin = () => {
+ if (!currentUser) return;
+ const newPin = window.prompt('Nuevo PIN de 6 dígitos:');
+ if (!newPin) return;
+ if (!/^\d{6}$/.test(newPin)) { addToast('El PIN debe ser de 6 dígitos numéricos', 'error'); return; }
+ const confirm2 = window.prompt('Confirmá el nuevo PIN:');
+ if (newPin !== confirm2) { addToast('Los PINs no coinciden', 'error'); return; }
+ db.ref('participants/' + safeName(currentUser) + '/pinHash').set(sha256(newPin));
+ addToast('🔑 PIN actualizado', 'success');
+};
+
+const handleReorderGroup = useCallback((group, newOrder, fullReplace) => {
+    if (fullReplace) {
+    setGroupOverrides(fullReplace);
+    fbSaveGroupOverrides(fullReplace);
+    addToast('Override reseteado', 'success');
+    return;
+    }
+    const updated = { ...groupOverrides, [group]: newOrder };
+    setGroupOverrides(updated);
+    fbSaveGroupOverrides(updated);
+    addToast(`Grupo ${group} reordenado`, 'success');
+}, [groupOverrides, addToast]);
+const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
 
     return (
         <div className="min-h-screen pb-32 hero-bg">
@@ -1446,7 +1625,9 @@ function App() {
                 <h1 className="text-6xl md:text-8xl font-black italic uppercase text-white text-center">PRODE<span className="text-[#deff9a]">26</span></h1>
                 <p className="text-slate-400 font-bold uppercase tracking-[0.3em] md:tracking-[0.4em] text-base md:text-xl mt-3 md:mt-4">Pasión o Razón</p>
                 <p className="text-slate-600 text-xs mt-2">Mundial FIFA 2026 · EE.UU. · Canadá · México</p>
-            </header>
+<button onClick={async()=>{const ok=await copyToClipboard(window.location.href);addToast(ok?"\uD83D\uDD17 Link copiado al portapapeles":"Error al copiar",ok?"success":"error");}} className="mt-4 bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-[#deff9a] hover:border-[#deff9a]/30 px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 mx-auto"><i className="fa-solid fa-share-nodes"></i>Compartir Link</button>
+            <Countdown />
+</header>
             <nav className="max-w-2xl mx-4 md:mx-auto flex bg-slate-900/90 border border-slate-800 rounded-full p-1.5 my-8 md:my-12 sticky top-4 z-50 backdrop-blur-xl shadow-2xl">
                 <button onClick={() => setView('ranking')} className={`flex-1 py-3 md:py-4 rounded-full font-black text-[10px] md:text-[11px] uppercase transition-all ${view === 'ranking' ? 'tab-active' : 'text-slate-500 hover:text-slate-300'}`}>
                     <i className="fa-solid fa-trophy mr-1"></i> Ranking
@@ -1466,6 +1647,7 @@ function App() {
                         <div className="glass p-8 md:p-16 rounded-[2rem] md:rounded-[4rem]">
                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 md:mb-20">
                                 <h3 className="text-4xl md:text-6xl font-black italic uppercase tracking-tighter"><i className="fa-solid fa-trophy text-[#deff9a] mr-4"></i>Ranking</h3>
+<button onClick={()=>{const el=document.getElementById("ranking-table");if(!el)return;html2canvas(el,{backgroundColor:"#0a0f1a",scale:2}).then(c=>{const a=document.createElement("a");a.download="PRODE26_Ranking.png";a.href=c.toDataURL();a.click();addToast("Imagen descargada","success");}).catch(()=>addToast("Error al exportar","error"));}} className="bg-slate-800 border border-slate-700 text-slate-400 hover:text-[#deff9a] px-4 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 transition-colors"><i className="fa-solid fa-camera"></i>Exportar</button>
                                 {participants.length > 5 && (
                                     <div className="relative w-full md:w-72">
                                         <i className="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm"></i>
@@ -1481,7 +1663,7 @@ function App() {
                                 </div>
                             ) : (
                                 <div className="overflow-x-auto -mx-4 md:-mx-8">
-                <table className="w-full text-left min-w-[1100px]">
+                <table id="ranking-table" className="w-full text-left min-w-[1100px]">
                     <thead>
                         <tr className="text-[8px] md:text-[9px] text-[#deff9a] uppercase font-black tracking-widest border-b-2 border-[#deff9a]/20">
                             <th className="p-2 sticky left-0 bg-[#0a0f1a] z-10 w-8">#</th>
@@ -1530,13 +1712,23 @@ function App() {
                         <div className="glass p-6 md:p-10 rounded-[2rem] md:rounded-[3rem] border border-slate-700/30 flex flex-col md:flex-row justify-between items-center gap-6">
                             <div className="flex-1 w-full flex gap-3">
                                 <select className="flex-1 bg-slate-950 border border-slate-800 p-4 md:p-5 rounded-2xl text-white font-bold outline-none focus:border-[#deff9a]" onChange={(e) => {
-                                    const u = participants.find(p => p.name === e.target.value);
-                                    setCurrentUser(e.target.value || null);
-                                    setPreds(u ? (u.predictions || {}) : {});
-                                    setGroupsLocked(u ? (u.groupsLocked || false) : false);
-                                    setKnockoutLocked(u ? (u.knockoutLocked || false) : false);
-                                    setHasUnsaved(false);
-                                }} value={currentUser || ""}>
+ const selectedName = e.target.value;
+ if (!selectedName) { setCurrentUser(null); setPreds({}); setGroupsLocked(false); setKnockoutLocked(false); setHasUnsaved(false); return; }
+ // Admin bypass
+ if (adminUnlocked && isAdminUser(currentUser)) {
+  const u = participants.find(p => p.name === selectedName);
+  setCurrentUser(selectedName);
+  setPreds(u ? (u.predictions || {}) : {});
+  setGroupsLocked(u ? (u.groupsLocked || false) : false);
+  setKnockoutLocked(u ? (u.knockoutLocked || false) : false);
+  setHasUnsaved(false);
+  return;
+ }
+ // Normal: pedir PIN
+ setPendingUser(selectedName);
+ setPinInput('');
+ setShowPinModal(true);
+}} value={currentUser || ""}>
                                     <option value="">-- Elige tu Perfil --</option>
                                     {participants.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
                                 </select>
@@ -1559,25 +1751,71 @@ function App() {
                                     <button onClick={handleClearPreds} className="bg-red-950 text-red-400 flex-1 md:flex-none md:px-6 py-4 rounded-2xl font-black text-[10px] uppercase border border-red-900/50 flex items-center justify-center gap-2 hover:bg-red-900/50 transition-colors">
                                         <i className="fa-solid fa-eraser"></i> Borrar
                                     </button>
+<button onClick={handleChangePin} className="bg-slate-800 text-yellow-400 flex-1 md:flex-none md:px-6 py-4 rounded-2xl font-black text-[10px] uppercase border border-yellow-900/50 flex items-center justify-center gap-2 hover:bg-slate-700 transition-colors"><i className="fa-solid fa-key"></i> PIN</button>
                                 </div>
                             )}
                         </div>
                         {showNewUserModal && (
-                            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[150] flex items-center justify-center p-4" onClick={() => setShowNewUserModal(false)}>
-                                <div className="glass p-8 rounded-3xl border border-slate-700 max-w-md w-full" onClick={e => e.stopPropagation()}>
-                                    <h3 className="font-black text-xl uppercase text-white mb-6"><i className="fa-solid fa-user-plus text-[#deff9a] mr-3"></i>Nuevo Perfil</h3>
-                                    <input type="text" value={newUserName} onChange={e => setNewUserName(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') handleCreateUser(); }}
-                                        placeholder="Tu nombre..." className="w-full bg-slate-950 border border-slate-800 p-4 rounded-2xl text-white font-bold outline-none focus:border-[#deff9a] mb-4" autoFocus />
-                                    <div className="flex gap-3">
-                                        <button onClick={() => setShowNewUserModal(false)} className="flex-1 py-4 rounded-2xl bg-slate-800 text-slate-400 font-black text-sm uppercase border border-slate-700">Cancelar</button>
-                                        <button onClick={handleCreateUser} className="flex-1 py-4 rounded-2xl bg-[#deff9a] text-black font-black text-sm uppercase">Crear</button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                        {currentUser ? (
+<div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[150] flex items-center justify-center p-4" onClick={() => setShowNewUserModal(false)}>
+<div className="glass p-8 rounded-3xl border border-slate-700 max-w-md w-full" onClick={ev => ev.stopPropagation()}>
+<h3 className="font-black text-xl uppercase text-white mb-6"><i className="fa-solid fa-user-plus text-[#deff9a] mr-3"></i>Nuevo Perfil</h3>
+<input type="text" value={newUserName} onChange={ev => setNewUserName(ev.target.value)} placeholder="Tu nombre..." className="w-full bg-slate-950 border border-slate-800 p-4 rounded-2xl text-white font-bold outline-none focus:border-[#deff9a] mb-3" autoFocus />
+<input type="password" inputMode="numeric" maxLength="6" value={newUserPin} onChange={ev => setNewUserPin(ev.target.value.replace(/[^0-9]/g,"").slice(0,6))} placeholder="PIN de 6 dígitos" className="w-full bg-slate-950 border border-slate-800 p-4 rounded-2xl text-white font-bold outline-none focus:border-[#deff9a] mb-3 tracking-[0.5em] text-center" />
+<input type="password" inputMode="numeric" maxLength="6" value={newUserPinConfirm} onChange={ev => setNewUserPinConfirm(ev.target.value.replace(/[^0-9]/g,"").slice(0,6))} onKeyDown={ev => { if(ev.key==="Enter") handleCreateUser(); }} placeholder="Confirmar PIN" className="w-full bg-slate-950 border border-slate-800 p-4 rounded-2xl text-white font-bold outline-none focus:border-[#deff9a] mb-4 tracking-[0.5em] text-center" />
+<div className="flex gap-3">
+<button onClick={() => setShowNewUserModal(false)} className="flex-1 py-4 rounded-2xl bg-slate-800 text-slate-400 font-black text-sm uppercase border border-slate-700">Cancelar</button>
+<button onClick={handleCreateUser} className="flex-1 py-4 rounded-2xl bg-[#deff9a] text-black font-black text-sm uppercase">Crear</button>
+</div></div></div>
+)}
+{showPinModal && (
+<div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[150] flex items-center justify-center p-4" onClick={() => { setShowPinModal(false); setPendingUser(null); setPinInput(""); }}>
+<div className="glass p-8 rounded-3xl border border-slate-700 max-w-sm w-full" onClick={ev => ev.stopPropagation()}>
+<h3 className="font-black text-xl uppercase text-white mb-2 text-center"><i className="fa-solid fa-lock text-[#deff9a] mr-3"></i>PIN</h3>
+<p className="text-slate-400 text-sm text-center mb-6">Ingresá el PIN de <strong className="text-white">{pendingUser}</strong></p>
+<input type="password" inputMode="numeric" maxLength="6" value={pinInput} onChange={ev => setPinInput(ev.target.value.replace(/[^0-9]/g,"").slice(0,6))} onKeyDown={ev => { if(ev.key==="Enter") handlePinVerify(); }} placeholder="••••••" className="w-full bg-slate-950 border-2 border-slate-800 p-5 rounded-2xl text-white font-black text-2xl outline-none focus:border-[#deff9a] mb-6 tracking-[0.8em] text-center" autoFocus />
+<div className="flex gap-3">
+<button onClick={() => { setShowPinModal(false); setPendingUser(null); setPinInput(""); }} className="flex-1 py-4 rounded-2xl bg-slate-800 text-slate-400 font-black text-sm uppercase border border-slate-700">Cancelar</button>
+<button onClick={handlePinVerify} className="flex-1 py-4 rounded-2xl bg-[#deff9a] text-black font-black text-sm uppercase">Entrar</button>
+</div></div></div>
+)}
+{currentUser ? (
                             <>
                                 <StatsDashboard preds={preds} matches={matches} groupsLocked={groupsLocked} />
+{Object.keys(officialResults).length > 0 && (
+<div className="mb-8">
+<button onClick={()=>setShowComparison(!showComparison)} className="w-full glass p-4 rounded-2xl border border-purple-500/20 flex items-center justify-between hover:bg-white/[0.02] transition-colors">
+<div className="flex items-center gap-3"><i className="fa-solid fa-code-compare text-purple-400"></i><span className="font-black text-sm uppercase tracking-wider text-white">Mis Predicciones vs Oficial</span></div>
+<i className={`fa-solid fa-chevron-down text-slate-400 transition-transform duration-300 ${showComparison ? 'rotate-180' : ''}`}></i>
+</button>
+{showComparison && (
+<div className="mt-4 space-y-4 view-enter">
+{Object.keys(EQUIPOS_POR_GRUPO).map(g => {
+const gm = matches.filter(m => m.group === g);
+const hasOff = gm.some(m => officialResults[m.id] && typeof officialResults[m.id].ga === 'number');
+if (!hasOff) return null;
+return (<div key={g} className="bg-slate-900/30 rounded-2xl p-4 border border-white/5">
+<h4 className="font-black text-lg text-white mb-3">Grupo {g}</h4>
+<div className="space-y-2">{gm.map(m => {
+const o = officialResults[m.id]; const u = preds[m.id];
+if (!o || typeof o.ga !== 'number') return null;
+const hasU = u && typeof u.ga === 'number' && typeof u.gb === 'number';
+const uRes = hasU ? (u.ga > u.gb ? 1 : u.ga < u.gb ? -1 : 0) : null;
+const oRes = o.ga > o.gb ? 1 : o.ga < o.gb ? -1 : 0;
+const hitRes = hasU && uRes === oRes; const hitA = hasU && u.ga === o.ga; const hitB = hasU && u.gb === o.gb;
+let pts = 0; if (hitRes) pts += 3; if (hitA) pts += 2; if (hitB) pts += 2;
+return (<div key={m.id} className="flex items-center gap-2 text-[11px] py-1.5 border-b border-white/5">
+<span className="w-24 truncate font-bold text-slate-400">{m.teamA}</span>
+<span className={`font-black px-1.5 py-0.5 rounded ${hitA ? 'bg-green-500/20 text-green-400' : 'text-slate-500'}`}>{hasU ? u.ga : '-'}</span>
+<span className="text-slate-600">-</span>
+<span className={`font-black px-1.5 py-0.5 rounded ${hitB ? 'bg-green-500/20 text-green-400' : 'text-slate-500'}`}>{hasU ? u.gb : '-'}</span>
+<span className="text-slate-600 mx-1">vs</span>
+<span className="font-black text-[#deff9a] px-1.5">{o.ga}</span><span className="text-slate-600">-</span><span className="font-black text-[#deff9a] px-1.5">{o.gb}</span>
+<span className="w-24 truncate font-bold text-slate-400 text-right">{m.teamB}</span>
+<span className={`ml-auto font-black text-xs px-2 py-0.5 rounded ${pts > 0 ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>+{pts}</span>
+</div>);})}
+</div></div>);})}
+</div>)}
+</div>)}
                                 <PredictionView matches={matches} currentPreds={preds} updateFn={handleUpdate} groupsLocked={groupsLocked} onLockGroups={handleLockGroups} r32Matchups={r32Matchups} knockoutLocked={knockoutLocked} onLockKnockout={onLockKnockout} />
                             </>
                         ) : (
@@ -1637,13 +1875,13 @@ function App() {
                         <div className="glass p-8 md:p-12 rounded-[2rem] md:rounded-[3.5rem] border border-red-500/10">
                             <h3 className="text-2xl md:text-4xl font-black text-red-500 italic uppercase mb-8 md:mb-12"><i className="fa-solid fa-clipboard-check mr-3"></i>Resultados Oficiales</h3>
                             <StatsDashboard preds={officialResults} matches={matches} groupsLocked={true} />
-                        <PredictionView matches={matches} currentPreds={officialResults} updateFn={(id, f, v) => handleUpdate(id, f, v, true)} isOfficial={true} groupsLocked={true} r32Matchups={r32Matchups} knockoutLocked={false} onLockKnockout={()=>{}} />
+                        <PredictionView matches={matches} currentPreds={officialResults} updateFn={(id, f, v) => handleUpdate(id, f, v, true)} isOfficial={true} groupsLocked={true} r32Matchups={r32Matchups} knockoutLocked={false} onLockKnockout={()=>{}} groupOverrides={groupOverrides} onReorderGroup={handleReorderGroup} />
                         </div>
                     </div>
                 )}
             </main>
             <footer className="max-w-7xl mx-auto px-6 mt-20 py-10 border-t border-white/5 text-center">
-                <p className="text-slate-700 text-xs font-bold uppercase tracking-widest">PRODE 26 · Mundial FIFA 2026 · Pasión o Razón · v7 🔥 Firebase FINAL</p>
+                <p className="text-slate-700 text-xs font-bold uppercase tracking-widest">PRODE 26 · Mundial FIFA 2026 · Pasión o Razón · v10 🔥 Firebase FINAL</p>
             </footer>
         </div>
     );

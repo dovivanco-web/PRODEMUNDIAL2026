@@ -1567,6 +1567,7 @@ function App() {
     const [showComparison, setShowComparison] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [adminUnlocked, setAdminUnlocked] = useState(false);
+    const [superAdminSession, setSuperAdminSession] = useState(false);
     const [showNewUserModal, setShowNewUserModal] = useState(false);
     const [newUserName, setNewUserName] = useState('');
  const [newUserPin, setNewUserPin] = useState('');
@@ -1580,6 +1581,19 @@ function App() {
  const groupsLockedRef = useRef(false);
  const knockoutLockedRef = useRef(false);
      const { toasts, addToast, removeToast } = useToasts();
+    const isSuperAdmin = isAdminUser(currentUser) && superAdminSession;
+    const isDelegatedAdmin = !isSuperAdmin && participants.some(p => p.name === currentUser && p.isAdmin === true);
+    const canUseAdminPanel = isSuperAdmin || isDelegatedAdmin;
+    const canManageAdmins = isSuperAdmin;
+    const requestAdminToggle = (name, makeAdmin) => {
+      if (!canManageAdmins) { addToast('No ten\u00e9s permisos para gestionar administradores', 'error'); return; }
+      if ((name || '').trim() === ADMIN_USER) { addToast('No pod\u00e9s modificar al SuperAdmin', 'error'); return; }
+      const pin = window.prompt('Confirm\u00e1 PIN de SuperAdmin para ' + (makeAdmin ? 'hacer' : 'quitar') + ' admin a ' + name + ':');
+      if (!pin) return;
+      if (!verifyAdminPin(pin)) { addToast('PIN incorrecto', 'error'); return; }
+      db.ref('participants/' + safeName(name) + '/isAdmin').set(makeAdmin ? true : null);
+      addToast(name + (makeAdmin ? ' ahora es Admin \u2705' : ' ya no es Admin \u274C'), makeAdmin ? 'success' : 'warn');
+    };
     const [fbLoaded, setFbLoaded] = useState(false);
     const fbSkipWrite = useRef(true);
  currentUserRef.current = currentUser;
@@ -2060,12 +2074,17 @@ const handleLockGroups = useCallback(() => {
         }
     };
     const handleAdminAccess = () => {
-        if (!isAdminUser(currentUser)) { addToast('No tenés permisos de administrador', 'error'); return; }
-        const entered = window.prompt('Ingresá el PIN de administrador:');
-        if (!entered) return;
-        const ok = verifyAdminPin(entered);
-        if (ok) { setAdminUnlocked(true); setView('admin'); addToast('Admin habilitado', 'success'); }
-        else { addToast('PIN incorrecto', 'error'); }
+        if (!currentUser) { addToast('Seleccion\u00e1 tu perfil primero', 'error'); return; }
+        if (isAdminUser(currentUser)) {
+            const entered = window.prompt('Ingres\u00e1 el PIN de SuperAdmin:');
+            if (!entered) return;
+            if (verifyAdminPin(entered)) { setSuperAdminSession(true); setAdminUnlocked(true); setView('admin'); addToast('\uD83D\uDEE1\uFE0F Modo SuperAdmin activado', 'success'); }
+            else { addToast('PIN incorrecto', 'error'); }
+        } else if (participants.some(p => p.name === currentUser && p.isAdmin === true)) {
+            setAdminUnlocked(true); setView('admin'); addToast('Panel Admin (delegado)', 'success');
+        } else {
+            addToast('No ten\u00e9s permisos de administrador', 'error');
+        }
     };
     const handleCreateUser = () => {
  const name = newUserName.trim();
@@ -2194,7 +2213,7 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
    <select className="flex-1 bg-slate-950 border border-slate-800 p-4 md:p-5 rounded-2xl text-white font-bold outline-none focus:border-[#deff9a]" onChange={(e) => {
     const selectedName = e.target.value;
     if (!selectedName) {
-     setCurrentUser(null); setPreds({}); setGroupsLocked(false); setKnockoutLocked(false); setHasUnsaved(false); setAdminUnlocked(false);
+     setCurrentUser(null); setPreds({}); setGroupsLocked(false); setKnockoutLocked(false); setHasUnsaved(false); setAdminUnlocked(false); setSuperAdminSession(false);
      return;
     }
     if (selectedName === currentUser) return;
@@ -2448,7 +2467,7 @@ return (<div key={m.id} className="flex items-center gap-2 text-[11px] py-1.5 bo
                         )}
                     </div>
                 )}
-                {view === 'admin' && adminUnlocked && isAdminUser(currentUser) && (
+                {view === 'admin' && adminUnlocked && canUseAdminPanel && (
                     <div className="space-y-12 md:space-y-16 view-enter">
                         <div className="glass p-8 md:p-12 rounded-[2rem] md:rounded-[3.5rem] border border-green-500/10">
                             <h3 className="text-2xl md:text-4xl font-black mb-8 md:mb-10 text-green-400 italic uppercase"><i className="fa-solid fa-users-gear mr-3"></i>Gestión Jugadores</h3>
@@ -2466,7 +2485,17 @@ return (<div key={m.id} className="flex items-center gap-2 text-[11px] py-1.5 bo
                                             <span className="font-bold truncate">{p.name}</span>
                                             {p.groupsLocked && <span className="text-[8px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded font-black">{'\uD83D\uDD12'}</span>}
                                         </div>
-                                        <button onClick={() => handleDeleteParticipant(p.name)} className="text-red-500/50 hover:text-red-500 hover:scale-125 transition-all p-2"><i className="fa-solid fa-trash"></i></button>
+                                        <div className="flex items-center gap-1">
+{canManageAdmins && p.name !== ADMIN_USER && (
+  p.isAdmin ? (
+    <button onClick={() => requestAdminToggle(p.name, false)} className="text-yellow-500/70 hover:text-yellow-500 transition-all p-1" title="Quitar Admin"><i className="fa-solid fa-user-minus text-xs"></i></button>
+  ) : (
+    <button onClick={() => requestAdminToggle(p.name, true)} className="text-green-500/50 hover:text-green-500 transition-all p-1" title="Hacer Admin"><i className="fa-solid fa-user-plus text-xs"></i></button>
+  )
+)}
+{p.isAdmin && <span className="text-[8px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded font-black">ADMIN</span>}
+{canManageAdmins && <button onClick={() => handleDeleteParticipant(p.name)} className="text-red-500/50 hover:text-red-500 hover:scale-125 transition-all p-2"><i className="fa-solid fa-trash"></i></button>}
+</div>
                                     </div>
                                 ))}
                             </div>
@@ -2493,6 +2522,37 @@ return (<div key={m.id} className="flex items-center gap-2 text-[11px] py-1.5 bo
                             </div>
                         </div>
                         
+                        
+                        {canManageAdmins && (
+                        <div className="glass p-8 md:p-12 rounded-[2rem] md:rounded-[3.5rem] border border-yellow-500/20">
+                            <h3 className="text-2xl md:text-4xl font-black text-yellow-400 italic uppercase mb-8">
+                                <i className="fa-solid fa-user-shield mr-3"></i>Administradores
+                            </h3>
+                            <p className="text-slate-400 text-sm mb-6">Los delegados pueden cargar resultados oficiales y cruces, pero <strong className="text-white">no pueden gestionar otros admins ni eliminar jugadores</strong>.</p>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div className="bg-yellow-500/5 border border-yellow-500/20 p-4 rounded-2xl flex items-center gap-3">
+                                    <i className="fa-solid fa-crown text-yellow-400"></i>
+                                    <span className="font-black text-white">{ADMIN_USER}</span>
+                                    <span className="text-[8px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded font-black ml-auto">SUPERADMIN</span>
+                                </div>
+                                {participants.filter(p => p.isAdmin === true && p.name !== ADMIN_USER).map(p => (
+                                    <div key={p.name} className="bg-slate-900 border border-yellow-500/10 p-4 rounded-2xl flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <i className="fa-solid fa-user-shield text-yellow-400/60"></i>
+                                            <span className="font-bold text-white">{p.name}</span>
+                                        </div>
+                                        <button onClick={() => requestAdminToggle(p.name, false)} className="text-red-400/60 hover:text-red-400 text-xs font-black uppercase px-3 py-1.5 rounded-lg border border-red-500/20 hover:bg-red-500/10 transition-all">
+                                            <i className="fa-solid fa-user-minus mr-1"></i>Quitar
+                                        </button>
+                                    </div>
+                                ))}
+                                {participants.filter(p => p.isAdmin === true && p.name !== ADMIN_USER).length === 0 && (
+                                    <div className="col-span-full text-center py-6 text-slate-600 text-sm font-bold">No hay administradores delegados</div>
+                                )}
+                            </div>
+                        </div>
+                        )}
+
                         <div className="glass p-8 md:p-12 rounded-[2rem] md:rounded-[3.5rem] border border-red-500/10">
                             <h3 className="text-2xl md:text-4xl font-black text-red-500 italic uppercase mb-8 md:mb-12"><i className="fa-solid fa-clipboard-check mr-3"></i>Resultados Oficiales</h3>
                             <StatsDashboard preds={officialResults} matches={matches} groupsLocked={true} />

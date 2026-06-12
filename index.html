@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PRODE Mundial 2026 - Pasión o Razón v13</title>
+    <title>PRODE Mundial 2026 - Pasión o Razón v21</title>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -123,6 +123,14 @@
  0% { transform: scale(1); box-shadow: 0 0 0 rgba(222,255,154,0); }
  50% { transform: scale(1.02); box-shadow: 0 0 25px rgba(222,255,154,0.4); }
  100% { transform: scale(1); box-shadow: 0 0 0 rgba(222,255,154,0); }
+}
+.highlight-animate {
+ animation: glowFade 2.4s ease-out forwards;
+}
+@keyframes glowFade {
+ 0% { background: rgba(222,255,154,0.35); box-shadow: 0 0 0 rgba(222,255,154,0); transform: scale(1); }
+ 25% { background: rgba(222,255,154,0.55); box-shadow: 0 0 28px rgba(222,255,154,0.75); transform: scale(1.01); }
+ 100% { background: transparent; box-shadow: none; transform: scale(1); }
 }
 
         
@@ -295,7 +303,7 @@ const sha256 = (ascii) => {
 const verifyAdminPin = (pin) => sha256(pin || '') === ADMIN_PIN_HASH;
 const fbSaveR32Matchups = (matchups) => db.ref('r32Matchups').set(matchups || {});
 const ALL_TEAMS = ([]).concat(...Object.values(EQUIPOS_POR_GRUPO));
-const GROUP_DEADLINE = new Date('2026-06-11T00:00:00-03:00');
+const GROUP_DEADLINE = new Date('2026-06-11T00:01:00-04:00');
 
 
 const copyToClipboard = async (text) => {
@@ -507,12 +515,12 @@ const getTeamsInPhase = (flow, matches, phase) => {
     return teams;
 };
 
-const FIRST_MATCH = new Date('2026-06-11T15:00:00-03:00');
+const FIRST_MATCH = new Date('2026-06-11T15:01:00-04:00');
 const Countdown = () => {
 const [now, setNow] = React.useState(new Date());
 useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
 const diff = FIRST_MATCH - now;
-if (diff <= 0) return (<div className="text-center mt-3"><span className="text-[#deff9a] font-black text-sm uppercase tracking-widest animate-pulse">⚽ \u00A1EL MUNDIAL COMENZ\u00D3! ⚽</span></div>);
+if (diff <= 0) return (<div className="text-center mt-3"><span className="text-[#deff9a] font-black text-sm uppercase tracking-widest animate-pulse">⚽ ¡EL MUNDIAL COMENZÓ! ⚽</span></div>);
 const days = Math.floor(diff / 86400000);
 const hrs = Math.floor((diff % 86400000) / 3600000);
 const mins = Math.floor((diff % 3600000) / 60000);
@@ -930,7 +938,7 @@ const PredictionView = memo(({ matches, currentPreds, updateFn, isOfficial, grou
                             <div key={g} className="bg-slate-900/20 border-t-4 border-[#deff9a] rounded-3xl p-6 md:p-8 shadow-xl view-enter">
                                 <div className="flex items-center justify-between mb-6 md:mb-8 group-header"><h3 className="font-black text-2xl md:text-3xl italic uppercase text-white">Grupo {g}{groupOverrides && groupOverrides[g] && <span className="text-yellow-500 text-sm ml-2" title="Orden ajustado por admin">\u26A0</span>}</h3>{isOfficial && onReorderGroup && groupOverrides && groupOverrides[g] && <button onClick={()=>{const up={...groupOverrides};delete up[g];onReorderGroup(null,null,up);}} className="text-[9px] text-yellow-400 font-black uppercase border border-yellow-500/30 px-3 py-1.5 rounded-lg hover:bg-yellow-500/10 transition-colors"><i className="fa-solid fa-rotate-left mr-1"></i>Reset</button>}</div>
                                 <div className="space-y-3">
-                                    {matches.filter(m => m.group === g).map(m => (<MatchRow key={m.id} m={m} preds={currentPreds} onUpdate={updateFn} matchIndex={groupMatchIdxMap[m.id]} disabled={groupsLocked && !isOfficial} />))}
+                                    {matches.filter(m => m.group === g).map(m => (<MatchRow key={m.id} m={m} preds={currentPreds} onUpdate={updateFn} matchIndex={groupMatchIdxMap[m.id]} disabled={!isOfficial && groupsLocked} />))}
                                 </div>
                                 <div className="mt-6 md:mt-8 bg-black/40 rounded-2xl md:rounded-3xl p-4 md:p-6 border border-white/5">
                                     <table className="w-full text-left">
@@ -1554,6 +1562,8 @@ function App() {
     const [view, setView] = useState('ranking');
     const [participants, setParticipants] = useState([]);
     const [officialResults, setOfficialResults] = useState({});
+    const [officialDraft, setOfficialDraft] = useState({});
+    const [officialDirty, setOfficialDirty] = useState(false);
     const [currentUser, setCurrentUser] = useState(null);
     const [preds, setPreds] = useState({});
     const [groupsLocked, setGroupsLocked] = useState(false);
@@ -1565,6 +1575,8 @@ function App() {
     const [showConfetti, setShowConfetti] = useState(false);
  const [showMatchDay, setShowMatchDay] = useState(false);
     const [showComparison, setShowComparison] = useState(false);
+    const [unlockOverrides, setUnlockOverrides] = useState({});
+    const [overrideNow, setOverrideNow] = useState(Date.now());
     const [searchQuery, setSearchQuery] = useState('');
     const [adminUnlocked, setAdminUnlocked] = useState(false);
     const [superAdminSession, setSuperAdminSession] = useState(false);
@@ -1580,6 +1592,10 @@ function App() {
  const currentUserRef = useRef(null);
  const groupsLockedRef = useRef(false);
  const knockoutLockedRef = useRef(false);
+ const officialDraftRef = useRef({});
+ const lastHighlightedUser = useRef(null);
+ const effectiveGroupsLockedRef = useRef(false);
+ const effectiveKnockoutLockedRef = useRef(false);
      const { toasts, addToast, removeToast } = useToasts();
     const isSuperAdmin = isAdminUser(currentUser) && superAdminSession;
     const isDelegatedAdmin = !isSuperAdmin && participants.some(p => p.name === currentUser && p.isAdmin === true);
@@ -1596,108 +1612,150 @@ function App() {
     };
     const [fbLoaded, setFbLoaded] = useState(false);
     const fbSkipWrite = useRef(true);
+    const isOverrideActive = useCallback((name) => {
+        const until = unlockOverrides[name];
+        return !!(until && until > overrideNow);
+    }, [unlockOverrides, overrideNow]);
+    const getOverrideRemaining = useCallback((name) => {
+        const until = unlockOverrides[name];
+        if (!until || until <= overrideNow) return null;
+        const diff = until - overrideNow;
+        const mins = Math.floor(diff / 60000);
+        const secs = Math.floor((diff % 60000) / 1000);
+        return `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+    }, [unlockOverrides, overrideNow]);
+    const unlockUserTemporarily = useCallback((name, minutes = 15) => {
+        const until = Date.now() + (minutes * 60 * 1000);
+        setUnlockOverrides(prev => ({ ...prev, [name]: until }));
+        addToast(`🔓 ${name} desbloqueado ${minutes} min`, 'success');
+    }, [addToast]);
+    const clearUserOverride = useCallback((name) => {
+        setUnlockOverrides(prev => {
+            const next = { ...prev };
+            delete next[name];
+            return next;
+        });
+        addToast(`🔒 Override removido para ${name}`, 'warn');
+    }, [addToast]);
+    useEffect(() => {
+        const t = setInterval(() => setOverrideNow(Date.now()), 1000);
+        return () => clearInterval(t);
+    }, []);
  currentUserRef.current = currentUser;
  groupsLockedRef.current = groupsLocked;
  knockoutLockedRef.current = knockoutLocked;
+ officialDraftRef.current = officialDraft;
+ const overrideActiveCurrentUser = !!(currentUser && isOverrideActive(currentUser));
+ const effectiveGroupsLocked = groupsLocked && !overrideActiveCurrentUser;
+ const effectiveKnockoutLocked = knockoutLocked && !overrideActiveCurrentUser;
+ effectiveGroupsLockedRef.current = effectiveGroupsLocked;
+ effectiveKnockoutLockedRef.current = effectiveKnockoutLocked;
+    useEffect(() => {
+        if (!currentUser) return;
+        const me = participants.find(p => p.name === currentUser);
+        if (!me) return;
+        setGroupsLocked(me.groupsLocked || false);
+        setKnockoutLocked(me.knockoutLocked || false);
+    }, [participants, currentUser]);
 
     const matches = useMemo(() => {
         let m = [];
         const fix = {
             A: [
-                { t1: "México", t2: "Sudáfrica", d: "Jueves 11 Jun", time: "15:00", s: "Estadio Ciudad de México" },
-                { t1: "República de Corea", t2: "República Checa", d: "Jueves 11 Jun", time: "22:00", s: "Estadio Guadalajara" },
-                { t1: "República Checa", t2: "Sudáfrica", d: "Jueves 18 Jun", time: "12:00", s: "Atlanta Stadium" },
-                { t1: "México", t2: "República de Corea", d: "Jueves 18 Jun", time: "21:00", s: "Estadio Guadalajara" },
-                { t1: "República Checa", t2: "México", d: "Miércoles 24 Jun", time: "21:00", s: "Estadio Ciudad de México" },
-                { t1: "Sudáfrica", t2: "República de Corea", d: "Miércoles 24 Jun", time: "21:00", s: "Estadio Monterrey" }
+                { t1: "México", t2: "Sudáfrica", d: "Jueves 11 Jun", time: "16:00", s: "Estadio Ciudad de México" },
+                { t1: "República de Corea", t2: "República Checa", d: "Jueves 11 Jun", time: "23:00", s: "Estadio Guadalajara" },
+                { t1: "República Checa", t2: "Sudáfrica", d: "Jueves 18 Jun", time: "13:00", s: "Atlanta Stadium" },
+                { t1: "México", t2: "República de Corea", d: "Jueves 18 Jun", time: "22:00", s: "Estadio Guadalajara" },
+                { t1: "República Checa", t2: "México", d: "Miércoles 24 Jun", time: "22:00", s: "Estadio Ciudad de México" },
+                { t1: "Sudáfrica", t2: "República de Corea", d: "Miércoles 24 Jun", time: "22:00", s: "Estadio Monterrey" }
             ],
             B: [
-                { t1: "Canadá", t2: "Bosnia y Herzegovina", d: "Viernes 12 Jun", time: "15:00", s: "Toronto Stadium" },
-                { t1: "Catar", t2: "Suiza", d: "Sábado 13 Jun", time: "15:00", s: "SF Bay Area Stadium" },
-                { t1: "Suiza", t2: "Bosnia y Herzegovina", d: "Jueves 18 Jun", time: "15:00", s: "Los Angeles Stadium" },
-                { t1: "Canadá", t2: "Catar", d: "Jueves 18 Jun", time: "18:00", s: "BC Place Vancouver" },
-                { t1: "Suiza", t2: "Canadá", d: "Miércoles 24 Jun", time: "15:00", s: "BC Place Vancouver" },
-                { t1: "Bosnia y Herzegovina", t2: "Catar", d: "Miércoles 24 Jun", time: "15:00", s: "Seattle Stadium" }
+                { t1: "Canadá", t2: "Bosnia y Herzegovina", d: "Viernes 12 Jun", time: "16:00", s: "Toronto Stadium" },
+                { t1: "Catar", t2: "Suiza", d: "Sábado 13 Jun", time: "16:00", s: "SF Bay Area Stadium" },
+                { t1: "Suiza", t2: "Bosnia y Herzegovina", d: "Jueves 18 Jun", time: "16:00", s: "Los Angeles Stadium" },
+                { t1: "Canadá", t2: "Catar", d: "Jueves 18 Jun", time: "19:00", s: "BC Place Vancouver" },
+                { t1: "Suiza", t2: "Canadá", d: "Miércoles 24 Jun", time: "16:00", s: "BC Place Vancouver" },
+                { t1: "Bosnia y Herzegovina", t2: "Catar", d: "Miércoles 24 Jun", time: "16:00", s: "Seattle Stadium" }
             ],
             C: [
-                { t1: "Brasil", t2: "Marruecos", d: "Sábado 13 Jun", time: "18:00", s: "NY NJ Stadium" },
-                { t1: "Haití", t2: "Escocia", d: "Sábado 13 Jun", time: "21:00", s: "Boston Stadium" },
-                { t1: "Escocia", t2: "Marruecos", d: "Viernes 19 Jun", time: "18:00", s: "Boston Stadium" },
-                { t1: "Brasil", t2: "Haití", d: "Viernes 19 Jun", time: "21:00", s: "Philadelphia Stadium" },
-                { t1: "Brasil", t2: "Escocia", d: "Miércoles 24 Jun", time: "18:00", s: "Miami Stadium" },
-                { t1: "Marruecos", t2: "Haití", d: "Miércoles 24 Jun", time: "18:00", s: "Atlanta Stadium" }
+                { t1: "Brasil", t2: "Marruecos", d: "Sábado 13 Jun", time: "19:00", s: "NY NJ Stadium" },
+                { t1: "Haití", t2: "Escocia", d: "Sábado 13 Jun", time: "22:00", s: "Boston Stadium" },
+                { t1: "Escocia", t2: "Marruecos", d: "Viernes 19 Jun", time: "19:00", s: "Boston Stadium" },
+                { t1: "Brasil", t2: "Haití", d: "Viernes 19 Jun", time: "22:00", s: "Philadelphia Stadium" },
+                { t1: "Brasil", t2: "Escocia", d: "Miércoles 24 Jun", time: "19:00", s: "Miami Stadium" },
+                { t1: "Marruecos", t2: "Haití", d: "Miércoles 24 Jun", time: "19:00", s: "Atlanta Stadium" }
             ],
             D: [
-                { t1: "Estados Unidos", t2: "Paraguay", d: "Viernes 12 Jun", time: "21:00", s: "Los Angeles Stadium" },
-                { t1: "Australia", t2: "Turquía", d: "Sábado 13 Jun", time: "00:00", s: "BC Place Vancouver" },
-                { t1: "Estados Unidos", t2: "Australia", d: "Viernes 19 Jun", time: "15:00", s: "Seattle Stadium" },
-                { t1: "Turquía", t2: "Paraguay", d: "Viernes 19 Jun", time: "00:00", s: "SF Bay Area Stadium" },
-                { t1: "Turquía", t2: "Estados Unidos", d: "Jueves 25 Jun", time: "22:00", s: "Los Angeles Stadium" },
-                { t1: "Paraguay", t2: "Australia", d: "Jueves 25 Jun", time: "22:00", s: "SF Bay Area Stadium" }
+                { t1: "Estados Unidos", t2: "Paraguay", d: "Viernes 12 Jun", time: "22:00", s: "Los Angeles Stadium" },
+                { t1: "Australia", t2: "Turquía", d: "Sábado 13 Jun", time: "01:00", s: "BC Place Vancouver" },
+                { t1: "Estados Unidos", t2: "Australia", d: "Viernes 19 Jun", time: "16:00", s: "Seattle Stadium" },
+                { t1: "Turquía", t2: "Paraguay", d: "Viernes 19 Jun", time: "01:00", s: "SF Bay Area Stadium" },
+                { t1: "Turquía", t2: "Estados Unidos", d: "Jueves 25 Jun", time: "23:00", s: "Los Angeles Stadium" },
+                { t1: "Paraguay", t2: "Australia", d: "Jueves 25 Jun", time: "23:00", s: "SF Bay Area Stadium" }
             ],
             E: [
-                { t1: "Alemania", t2: "Curazao", d: "Domingo 14 Jun", time: "13:00", s: "Houston Stadium" },
-                { t1: "Costa de Marfil", t2: "Ecuador", d: "Domingo 14 Jun", time: "19:00", s: "Philadelphia Stadium" },
-                { t1: "Alemania", t2: "Costa de Marfil", d: "Sábado 20 Jun", time: "16:00", s: "Toronto Stadium" },
-                { t1: "Ecuador", t2: "Curazao", d: "Sábado 20 Jun", time: "22:00", s: "Kansas City Stadium" },
-                { t1: "Curazao", t2: "Costa de Marfil", d: "Jueves 25 Jun", time: "16:00", s: "Philadelphia Stadium" },
-                { t1: "Ecuador", t2: "Alemania", d: "Jueves 25 Jun", time: "16:00", s: "NY NJ Stadium" }
+                { t1: "Alemania", t2: "Curazao", d: "Domingo 14 Jun", time: "14:00", s: "Houston Stadium" },
+                { t1: "Costa de Marfil", t2: "Ecuador", d: "Domingo 14 Jun", time: "20:00", s: "Philadelphia Stadium" },
+                { t1: "Alemania", t2: "Costa de Marfil", d: "Sábado 20 Jun", time: "17:00", s: "Toronto Stadium" },
+                { t1: "Ecuador", t2: "Curazao", d: "Sábado 20 Jun", time: "23:00", s: "Kansas City Stadium" },
+                { t1: "Curazao", t2: "Costa de Marfil", d: "Jueves 25 Jun", time: "17:00", s: "Philadelphia Stadium" },
+                { t1: "Ecuador", t2: "Alemania", d: "Jueves 25 Jun", time: "17:00", s: "NY NJ Stadium" }
             ],
             F: [
-                { t1: "Países Bajos", t2: "Japón", d: "Domingo 14 Jun", time: "16:00", s: "Dallas Stadium" },
-                { t1: "Suecia", t2: "Túnez", d: "Domingo 14 Jun", time: "22:00", s: "Estadio Monterrey" },
-                { t1: "Países Bajos", t2: "Suecia", d: "Sábado 20 Jun", time: "13:00", s: "Houston Stadium" },
-                { t1: "Túnez", t2: "Japón", d: "Sábado 20 Jun", time: "00:00", s: "Estadio Monterrey" },
-                { t1: "Japón", t2: "Suecia", d: "Jueves 25 Jun", time: "19:00", s: "Dallas Stadium" },
-                { t1: "Túnez", t2: "Países Bajos", d: "Jueves 25 Jun", time: "19:00", s: "Kansas City Stadium" }
+                { t1: "Países Bajos", t2: "Japón", d: "Domingo 14 Jun", time: "17:00", s: "Dallas Stadium" },
+                { t1: "Suecia", t2: "Túnez", d: "Domingo 14 Jun", time: "23:00", s: "Estadio Monterrey" },
+                { t1: "Países Bajos", t2: "Suecia", d: "Sábado 20 Jun", time: "14:00", s: "Houston Stadium" },
+                { t1: "Túnez", t2: "Japón", d: "Sábado 20 Jun", time: "01:00", s: "Estadio Monterrey" },
+                { t1: "Japón", t2: "Suecia", d: "Jueves 25 Jun", time: "20:00", s: "Dallas Stadium" },
+                { t1: "Túnez", t2: "Países Bajos", d: "Jueves 25 Jun", time: "20:00", s: "Kansas City Stadium" }
             ],
             G: [
-                { t1: "Bélgica", t2: "Egipto", d: "Lunes 15 Jun", time: "15:00", s: "Seattle Stadium" },
-                { t1: "RI de Irán", t2: "Nueva Zelanda", d: "Lunes 15 Jun", time: "21:00", s: "Los Angeles Stadium" },
-                { t1: "Bélgica", t2: "RI de Irán", d: "Domingo 21 Jun", time: "15:00", s: "Los Angeles Stadium" },
-                { t1: "Nueva Zelanda", t2: "Egipto", d: "Domingo 21 Jun", time: "21:00", s: "BC Place Vancouver" },
-                { t1: "Egipto", t2: "RI de Irán", d: "Viernes 26 Jun", time: "23:00", s: "Seattle Stadium" },
-                { t1: "Nueva Zelanda", t2: "Bélgica", d: "Viernes 26 Jun", time: "23:00", s: "BC Place Vancouver" }
+                { t1: "Bélgica", t2: "Egipto", d: "Lunes 15 Jun", time: "16:00", s: "Seattle Stadium" },
+                { t1: "RI de Irán", t2: "Nueva Zelanda", d: "Lunes 15 Jun", time: "22:00", s: "Los Angeles Stadium" },
+                { t1: "Bélgica", t2: "RI de Irán", d: "Domingo 21 Jun", time: "16:00", s: "Los Angeles Stadium" },
+                { t1: "Nueva Zelanda", t2: "Egipto", d: "Domingo 21 Jun", time: "22:00", s: "BC Place Vancouver" },
+                { t1: "Egipto", t2: "RI de Irán", d: "Viernes 26 Jun", time: "00:00", s: "Seattle Stadium" },
+                { t1: "Nueva Zelanda", t2: "Bélgica", d: "Viernes 26 Jun", time: "00:00", s: "BC Place Vancouver" }
             ],
             H: [
-                { t1: "España", t2: "Cabo Verde", d: "Lunes 15 Jun", time: "12:00", s: "Atlanta Stadium" },
-                { t1: "Arabia Saudí", t2: "Uruguay", d: "Lunes 15 Jun", time: "18:00", s: "Miami Stadium" },
-                { t1: "España", t2: "Arabia Saudí", d: "Domingo 21 Jun", time: "12:00", s: "Atlanta Stadium" },
-                { t1: "Uruguay", t2: "Cabo Verde", d: "Domingo 21 Jun", time: "18:00", s: "Miami Stadium" },
-                { t1: "Cabo Verde", t2: "Arabia Saudí", d: "Viernes 26 Jun", time: "20:00", s: "Houston Stadium" },
-                { t1: "Uruguay", t2: "España", d: "Viernes 26 Jun", time: "20:00", s: "Estadio Guadalajara" }
+                { t1: "España", t2: "Cabo Verde", d: "Lunes 15 Jun", time: "13:00", s: "Atlanta Stadium" },
+                { t1: "Arabia Saudí", t2: "Uruguay", d: "Lunes 15 Jun", time: "19:00", s: "Miami Stadium" },
+                { t1: "España", t2: "Arabia Saudí", d: "Domingo 21 Jun", time: "13:00", s: "Atlanta Stadium" },
+                { t1: "Uruguay", t2: "Cabo Verde", d: "Domingo 21 Jun", time: "19:00", s: "Miami Stadium" },
+                { t1: "Cabo Verde", t2: "Arabia Saudí", d: "Viernes 26 Jun", time: "21:00", s: "Houston Stadium" },
+                { t1: "Uruguay", t2: "España", d: "Viernes 26 Jun", time: "21:00", s: "Estadio Guadalajara" }
             ],
             I: [
-                { t1: "Francia", t2: "Senegal", d: "Martes 16 Jun", time: "15:00", s: "NY NJ Stadium" },
-                { t1: "Irak", t2: "Noruega", d: "Martes 16 Jun", time: "18:00", s: "Boston Stadium" },
-                { t1: "Francia", t2: "Irak", d: "Lunes 22 Jun", time: "17:00", s: "Philadelphia Stadium" },
-                { t1: "Noruega", t2: "Senegal", d: "Lunes 22 Jun", time: "20:00", s: "NY NJ Stadium" },
-                { t1: "Noruega", t2: "Francia", d: "Viernes 26 Jun", time: "15:00", s: "Boston Stadium" },
-                { t1: "Senegal", t2: "Irak", d: "Viernes 26 Jun", time: "15:00", s: "Toronto Stadium" }
+                { t1: "Francia", t2: "Senegal", d: "Martes 16 Jun", time: "16:00", s: "NY NJ Stadium" },
+                { t1: "Irak", t2: "Noruega", d: "Martes 16 Jun", time: "19:00", s: "Boston Stadium" },
+                { t1: "Francia", t2: "Irak", d: "Lunes 22 Jun", time: "18:00", s: "Philadelphia Stadium" },
+                { t1: "Noruega", t2: "Senegal", d: "Lunes 22 Jun", time: "21:00", s: "NY NJ Stadium" },
+                { t1: "Noruega", t2: "Francia", d: "Viernes 26 Jun", time: "16:00", s: "Boston Stadium" },
+                { t1: "Senegal", t2: "Irak", d: "Viernes 26 Jun", time: "16:00", s: "Toronto Stadium" }
             ],
             J: [
-                { t1: "Argentina", t2: "Argelia", d: "Martes 16 Jun", time: "21:00", s: "Kansas City Stadium" },
-                { t1: "Austria", t2: "Jordania", d: "Martes 16 Jun", time: "00:00", s: "SF Bay Area Stadium" },
-                { t1: "Argentina", t2: "Austria", d: "Lunes 22 Jun", time: "13:00", s: "Dallas Stadium" },
-                { t1: "Jordania", t2: "Argelia", d: "Lunes 22 Jun", time: "23:00", s: "SF Bay Area Stadium" },
-                { t1: "Argelia", t2: "Austria", d: "Sábado 27 Jun", time: "22:00", s: "Kansas City Stadium" },
-                { t1: "Jordania", t2: "Argentina", d: "Sábado 27 Jun", time: "22:00", s: "Dallas Stadium" }
+                { t1: "Argentina", t2: "Argelia", d: "Martes 16 Jun", time: "22:00", s: "Kansas City Stadium" },
+                { t1: "Austria", t2: "Jordania", d: "Martes 16 Jun", time: "01:00", s: "SF Bay Area Stadium" },
+                { t1: "Argentina", t2: "Austria", d: "Lunes 22 Jun", time: "14:00", s: "Dallas Stadium" },
+                { t1: "Jordania", t2: "Argelia", d: "Lunes 22 Jun", time: "00:00", s: "SF Bay Area Stadium" },
+                { t1: "Argelia", t2: "Austria", d: "Sábado 27 Jun", time: "23:00", s: "Kansas City Stadium" },
+                { t1: "Jordania", t2: "Argentina", d: "Sábado 27 Jun", time: "23:00", s: "Dallas Stadium" }
             ],
             K: [
-                { t1: "Portugal", t2: "RD de Congo", d: "Miércoles 17 Jun", time: "13:00", s: "Houston Stadium" },
-                { t1: "Uzbekistán", t2: "Colombia", d: "Miércoles 17 Jun", time: "22:00", s: "Estadio Ciudad de México" },
-                { t1: "Portugal", t2: "Uzbekistán", d: "Martes 23 Jun", time: "13:00", s: "Houston Stadium" },
-                { t1: "Colombia", t2: "RD de Congo", d: "Martes 23 Jun", time: "22:00", s: "Estadio Guadalajara" },
-                { t1: "Colombia", t2: "Portugal", d: "Sábado 27 Jun", time: "19:30", s: "Miami Stadium" },
-                { t1: "RD de Congo", t2: "Uzbekistán", d: "Sábado 27 Jun", time: "19:30", s: "Atlanta Stadium" }
+                { t1: "Portugal", t2: "RD de Congo", d: "Miércoles 17 Jun", time: "14:00", s: "Houston Stadium" },
+                { t1: "Uzbekistán", t2: "Colombia", d: "Miércoles 17 Jun", time: "23:00", s: "Estadio Ciudad de México" },
+                { t1: "Portugal", t2: "Uzbekistán", d: "Martes 23 Jun", time: "14:00", s: "Houston Stadium" },
+                { t1: "Colombia", t2: "RD de Congo", d: "Martes 23 Jun", time: "23:00", s: "Estadio Guadalajara" },
+                { t1: "Colombia", t2: "Portugal", d: "Sábado 27 Jun", time: "20:30", s: "Miami Stadium" },
+                { t1: "RD de Congo", t2: "Uzbekistán", d: "Sábado 27 Jun", time: "20:30", s: "Atlanta Stadium" }
             ],
             L: [
-                { t1: "Inglaterra", t2: "Croacia", d: "Miércoles 17 Jun", time: "16:00", s: "Dallas Stadium" },
-                { t1: "Ghana", t2: "Panamá", d: "Miércoles 17 Jun", time: "19:00", s: "Toronto Stadium" },
-                { t1: "Inglaterra", t2: "Ghana", d: "Martes 23 Jun", time: "16:00", s: "Boston Stadium" },
-                { t1: "Panamá", t2: "Croacia", d: "Martes 23 Jun", time: "19:00", s: "Toronto Stadium" },
-                { t1: "Panamá", t2: "Inglaterra", d: "Sábado 27 Jun", time: "17:00", s: "NY NJ Stadium" },
-                { t1: "Croacia", t2: "Ghana", d: "Sábado 27 Jun", time: "17:00", s: "Philadelphia Stadium" }
+                { t1: "Inglaterra", t2: "Croacia", d: "Miércoles 17 Jun", time: "17:00", s: "Dallas Stadium" },
+                { t1: "Ghana", t2: "Panamá", d: "Miércoles 17 Jun", time: "20:00", s: "Toronto Stadium" },
+                { t1: "Inglaterra", t2: "Ghana", d: "Martes 23 Jun", time: "17:00", s: "Boston Stadium" },
+                { t1: "Panamá", t2: "Croacia", d: "Martes 23 Jun", time: "20:00", s: "Toronto Stadium" },
+                { t1: "Panamá", t2: "Inglaterra", d: "Sábado 27 Jun", time: "18:00", s: "NY NJ Stadium" },
+                { t1: "Croacia", t2: "Ghana", d: "Sábado 27 Jun", time: "18:00", s: "Philadelphia Stadium" }
             ]
         };
         Object.keys(EQUIPOS_POR_GRUPO).forEach(g => {
@@ -1705,38 +1763,38 @@ function App() {
                 m.push({ id: `G-${g}-${i+1}`, group: g, teamA: info.t1, teamB: info.t2, phase: "Grupos", date: info.d, time: info.time, stadium: info.s, pts: 3 });
             });
         });
-            m.push({ id: 'M73', phase: "Dieciseisavos", pts: 4, date: "Domingo 28 Jun", time: "14:00", stadium: "Los Angeles Stadium" });
-    m.push({ id: 'M74', phase: "Dieciseisavos", pts: 4, date: "Lunes 29 Jun", time: "15:30", stadium: "Boston Stadium" });
-    m.push({ id: 'M75', phase: "Dieciseisavos", pts: 4, date: "Lunes 29 Jun", time: "20:00", stadium: "Estadio Monterrey" });
-    m.push({ id: 'M76', phase: "Dieciseisavos", pts: 4, date: "Lunes 29 Jun", time: "12:00", stadium: "Houston Stadium" });
-    m.push({ id: 'M77', phase: "Dieciseisavos", pts: 4, date: "Martes 30 Jun", time: "16:00", stadium: "NY NJ Stadium" });
-    m.push({ id: 'M78', phase: "Dieciseisavos", pts: 4, date: "Martes 30 Jun", time: "12:00", stadium: "Dallas Stadium" });
-    m.push({ id: 'M79', phase: "Dieciseisavos", pts: 4, date: "Martes 30 Jun", time: "20:00", stadium: "Estadio Ciudad de México" });
-    m.push({ id: 'M80', phase: "Dieciseisavos", pts: 4, date: "Miércoles 1 Jul", time: "11:00", stadium: "Atlanta Stadium" });
-    m.push({ id: 'M81', phase: "Dieciseisavos", pts: 4, date: "Miércoles 1 Jul", time: "19:00", stadium: "SF Bay Area Stadium" });
-    m.push({ id: 'M82', phase: "Dieciseisavos", pts: 4, date: "Miércoles 1 Jul", time: "14:00", stadium: "Seattle Stadium" });
+            m.push({ id: 'M73', phase: "Dieciseisavos", pts: 4, date: "Domingo 28 Jun", time: "15:00", stadium: "Los Angeles Stadium" });
+    m.push({ id: 'M74', phase: "Dieciseisavos", pts: 4, date: "Lunes 29 Jun", time: "16:30", stadium: "Boston Stadium" });
+    m.push({ id: 'M75', phase: "Dieciseisavos", pts: 4, date: "Lunes 29 Jun", time: "21:00", stadium: "Estadio Monterrey" });
+    m.push({ id: 'M76', phase: "Dieciseisavos", pts: 4, date: "Lunes 29 Jun", time: "13:00", stadium: "Houston Stadium" });
+    m.push({ id: 'M77', phase: "Dieciseisavos", pts: 4, date: "Martes 30 Jun", time: "17:00", stadium: "NY NJ Stadium" });
+    m.push({ id: 'M78', phase: "Dieciseisavos", pts: 4, date: "Martes 30 Jun", time: "13:00", stadium: "Dallas Stadium" });
+    m.push({ id: 'M79', phase: "Dieciseisavos", pts: 4, date: "Martes 30 Jun", time: "21:00", stadium: "Estadio Ciudad de México" });
+    m.push({ id: 'M80', phase: "Dieciseisavos", pts: 4, date: "Miércoles 1 Jul", time: "12:00", stadium: "Atlanta Stadium" });
+    m.push({ id: 'M81', phase: "Dieciseisavos", pts: 4, date: "Miércoles 1 Jul", time: "20:00", stadium: "SF Bay Area Stadium" });
+    m.push({ id: 'M82', phase: "Dieciseisavos", pts: 4, date: "Miércoles 1 Jul", time: "15:00", stadium: "Seattle Stadium" });
     m.push({ id: 'M83', phase: "Dieciseisavos", pts: 4, date: "Jueves 2 Jul", time: "—", stadium: "Toronto Stadium" });
     m.push({ id: 'M84', phase: "Dieciseisavos", pts: 4, date: "Jueves 2 Jul", time: "—", stadium: "Los Angeles Stadium" });
     m.push({ id: 'M85', phase: "Dieciseisavos", pts: 4, date: "Jueves 2 Jul", time: "—", stadium: "BC Place Vancouver" });
-    m.push({ id: 'M86', phase: "Dieciseisavos", pts: 4, date: "Viernes 3 Jul", time: "17:00", stadium: "Miami Stadium" });
-    m.push({ id: 'M87', phase: "Dieciseisavos", pts: 4, date: "Viernes 3 Jul", time: "20:30", stadium: "Kansas City Stadium" });
-    m.push({ id: 'M88', phase: "Dieciseisavos", pts: 4, date: "Viernes 3 Jul", time: "13:00", stadium: "Dallas Stadium" });
-    m.push({ id: 'M89', phase: "Octavos", pts: 12, date: "Sábado 4 Jul", time: "16:00", stadium: "Philadelphia Stadium" });
-    m.push({ id: 'M90', phase: "Octavos", pts: 12, date: "Sábado 4 Jul", time: "12:00", stadium: "Houston Stadium" });
-    m.push({ id: 'M91', phase: "Octavos", pts: 12, date: "Domingo 5 Jul", time: "14:00", stadium: "NY NJ Stadium" });
-    m.push({ id: 'M92', phase: "Octavos", pts: 12, date: "Domingo 5 Jul", time: "19:00", stadium: "Estadio Azteca" });
-    m.push({ id: 'M93', phase: "Octavos", pts: 12, date: "Lunes 6 Jul", time: "14:00", stadium: "Dallas Stadium" });
-    m.push({ id: 'M94', phase: "Octavos", pts: 12, date: "Lunes 6 Jul", time: "19:00", stadium: "Seattle Stadium" });
-    m.push({ id: 'M95', phase: "Octavos", pts: 12, date: "Martes 7 Jul", time: "11:00", stadium: "Atlanta Stadium" });
-    m.push({ id: 'M96', phase: "Octavos", pts: 12, date: "Martes 7 Jul", time: "14:00", stadium: "BC Place Vancouver" });
-    m.push({ id: 'M97', phase: "Cuartos", pts: 15, date: "Jueves 9 Jul", time: "14:00", stadium: "Boston Stadium" });
-    m.push({ id: 'M98', phase: "Cuartos", pts: 15, date: "Viernes 10 Jul", time: "14:00", stadium: "Los Angeles Stadium" });
-    m.push({ id: 'M99', phase: "Cuartos", pts: 15, date: "Sábado 11 Jul", time: "16:00", stadium: "Miami Stadium" });
-    m.push({ id: 'M100', phase: "Cuartos", pts: 15, date: "Sábado 11 Jul", time: "20:00", stadium: "Kansas City Stadium" });
-    m.push({ id: 'M101', phase: "Semis", pts: 20, date: "Martes 14 Jul", time: "14:00", stadium: "Dallas Stadium" });
-    m.push({ id: 'M102', phase: "Semis", pts: 20, date: "Miércoles 15 Jul", time: "14:00", stadium: "Atlanta Stadium" });
-    m.push({ id: 'M103', phase: "Tercer Puesto", pts: 15, date: "Sábado 18 Jul", time: "16:00", stadium: "Miami Stadium" });
-    m.push({ id: 'M104', phase: "Final", pts: 25, date: "Domingo 19 Jul", time: "14:00", stadium: "NY NJ Stadium" });
+    m.push({ id: 'M86', phase: "Dieciseisavos", pts: 4, date: "Viernes 3 Jul", time: "18:00", stadium: "Miami Stadium" });
+    m.push({ id: 'M87', phase: "Dieciseisavos", pts: 4, date: "Viernes 3 Jul", time: "21:30", stadium: "Kansas City Stadium" });
+    m.push({ id: 'M88', phase: "Dieciseisavos", pts: 4, date: "Viernes 3 Jul", time: "14:00", stadium: "Dallas Stadium" });
+    m.push({ id: 'M89', phase: "Octavos", pts: 12, date: "Sábado 4 Jul", time: "17:00", stadium: "Philadelphia Stadium" });
+    m.push({ id: 'M90', phase: "Octavos", pts: 12, date: "Sábado 4 Jul", time: "13:00", stadium: "Houston Stadium" });
+    m.push({ id: 'M91', phase: "Octavos", pts: 12, date: "Domingo 5 Jul", time: "15:00", stadium: "NY NJ Stadium" });
+    m.push({ id: 'M92', phase: "Octavos", pts: 12, date: "Domingo 5 Jul", time: "20:00", stadium: "Estadio Azteca" });
+    m.push({ id: 'M93', phase: "Octavos", pts: 12, date: "Lunes 6 Jul", time: "15:00", stadium: "Dallas Stadium" });
+    m.push({ id: 'M94', phase: "Octavos", pts: 12, date: "Lunes 6 Jul", time: "20:00", stadium: "Seattle Stadium" });
+    m.push({ id: 'M95', phase: "Octavos", pts: 12, date: "Martes 7 Jul", time: "12:00", stadium: "Atlanta Stadium" });
+    m.push({ id: 'M96', phase: "Octavos", pts: 12, date: "Martes 7 Jul", time: "15:00", stadium: "BC Place Vancouver" });
+    m.push({ id: 'M97', phase: "Cuartos", pts: 15, date: "Jueves 9 Jul", time: "15:00", stadium: "Boston Stadium" });
+    m.push({ id: 'M98', phase: "Cuartos", pts: 15, date: "Viernes 10 Jul", time: "15:00", stadium: "Los Angeles Stadium" });
+    m.push({ id: 'M99', phase: "Cuartos", pts: 15, date: "Sábado 11 Jul", time: "17:00", stadium: "Miami Stadium" });
+    m.push({ id: 'M100', phase: "Cuartos", pts: 15, date: "Sábado 11 Jul", time: "21:00", stadium: "Kansas City Stadium" });
+    m.push({ id: 'M101', phase: "Semis", pts: 20, date: "Martes 14 Jul", time: "15:00", stadium: "Dallas Stadium" });
+    m.push({ id: 'M102', phase: "Semis", pts: 20, date: "Miércoles 15 Jul", time: "15:00", stadium: "Atlanta Stadium" });
+    m.push({ id: 'M103', phase: "Tercer Puesto", pts: 15, date: "Sábado 18 Jul", time: "17:00", stadium: "Miami Stadium" });
+    m.push({ id: 'M104', phase: "Final", pts: 25, date: "Domingo 19 Jul", time: "15:00", stadium: "NY NJ Stadium" });
         return m;
     }, []);
 
@@ -1858,13 +1916,16 @@ function App() {
             // Update current user's local state if they're selected
             if (currentUserRef.current) {
                 const me = arr.find(p => p.name === currentUserRef.current);
-                if (me) { setPreds(me.predictions || {}); setGroupsLocked(me.groupsLocked || false); setKnockoutLocked(me.knockoutLocked || false); }
+                if (me) { setPreds(me.predictions || {}); }
             }
             setFbLoaded(true);
             fbSkipWrite.current = false;
         });
         const unsubO = db.ref('officialResults').on('value', snap => {
-            setOfficialResults(snap.val() || {});
+            const nextOfficial = snap.val() || {};
+            setOfficialResults(nextOfficial);
+            setOfficialDraft(nextOfficial);
+            setOfficialDirty(false);
         });
         const unsubPR = db.ref('previousRanking').on('value', snap => {
             setPrevRanking(snap.val() || {});
@@ -1937,6 +1998,36 @@ function App() {
         }
     }, [preds, currentUser, matches]);
 
+
+    const handleOfficialUpdate = useCallback((id, field, value) => {
+        let val;
+        if (field === 'winner') val = value;
+        else { if (value === "") val = null; else val = Math.max(0, parseInt(value, 10)); }
+
+        setOfficialDraft(prev => {
+            const existing = prev[id] || {};
+            const updated = { ...existing, [field]: val };
+            const mNum = parseInt((id.startsWith('M') ? id.slice(1) : '0'), 10);
+            if (field !== 'winner' && mNum >= 73 && mNum <= 88) {
+                if (typeof updated.ga === 'number' && typeof updated.gb === 'number' && updated.ga !== updated.gb) {
+                    delete updated.winner;
+                }
+            }
+            const nextState = { ...prev, [id]: updated };
+            officialDraftRef.current = nextState;
+            return nextState;
+        });
+        setOfficialDirty(true);
+    }, []);
+
+    const handleSaveOfficial = useCallback(() => {
+        const payload = officialDraftRef.current || {};
+        setOfficialResults(payload);
+        fbSaveOfficial(payload);
+        setOfficialDirty(false);
+        addToast('Resultados oficiales guardados', 'success');
+    }, [addToast]);
+
     const handleUpdate = useCallback((id, field, value, isOfficial = false) => {
  // Seguridad: solo el dueño del perfil puede editar sus pronósticos
  if (!isOfficial) {
@@ -1944,8 +2035,8 @@ function App() {
   // (ref-based currentUser check is sufficient)
  }
 
-        if (!isOfficial && groupsLockedRef.current && id.startsWith('G-')) return;
-        if (!isOfficial && knockoutLockedRef.current && id.startsWith('M')) return;
+        if (!isOfficial && effectiveGroupsLockedRef.current && id.startsWith('G-')) return;
+        if (!isOfficial && effectiveKnockoutLockedRef.current && id.startsWith('M')) return;
         let val;
         if (field === 'winner') val = value;
         else { if (value === "") val = null; else val = Math.max(0, parseInt(value, 10)); }
@@ -2162,6 +2253,16 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
   el.classList.add('pulse-highlight');
   setTimeout(() => el.classList.remove('pulse-highlight'), 1200);
  }, [view, currentUser, addToast]);
+ useEffect(() => {
+  if (view !== 'ranking') return;
+  if (!currentUser || !myRowEl.current) return;
+  if (lastHighlightedUser.current === currentUser) return;
+  lastHighlightedUser.current = currentUser;
+  myRowEl.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  myRowEl.current.classList.add('highlight-animate');
+  const t = setTimeout(() => { myRowEl.current?.classList.remove('highlight-animate'); }, 2400);
+  return () => clearTimeout(t);
+ }, [currentUser, view]);
 
 
     return (
@@ -2320,17 +2421,7 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
                         <React.Fragment key={p.name}>
 <tr 
   key={p.name}
-  ref={currentUser === p.name ? (el) => {
- if (el) {
-  myRowEl.current = el;
-  try { el.setAttribute('data-me-row','1'); } catch(e){}
-  setTimeout(() => {
-   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-   el.classList.add('pulse-highlight');
-   setTimeout(() => el.classList.remove('pulse-highlight'), 1200);
-  }, 300);
- }
-} : null}
+  ref={currentUser === p.name ? (el) => { if (el) { myRowEl.current = el; try { el.setAttribute('data-me-row','1'); } catch(e){} } } : null}
   className={`border-t border-white/5 transition-all hover:bg-white/5
  ${i < 3 ? 'bg-[#deff9a]/[0.03]' : ''}
  ${i === 0 ? 'prize-row-1' : i === 1 ? 'prize-row-2' : ''}
@@ -2399,6 +2490,7 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
                         <div className="glass p-6 md:p-10 rounded-[2rem] md:rounded-[3rem] border border-slate-700/30 flex flex-col md:flex-row justify-between items-center gap-6">
                             <div className="w-full md:w-auto text-xs font-black uppercase tracking-widest text-slate-500">
                                 <i className="fa-solid fa-user mr-2 text-[#deff9a]"></i>Perfil: <span className="text-white">{currentUser}</span>
+                                {isOverrideActive(currentUser) && (<span className="ml-3 text-[10px] font-black uppercase tracking-widest text-yellow-400">🔓 Override activo {getOverrideRemaining(currentUser)}</span>)}
                             </div>
                             <div className="flex flex-wrap gap-3 w-full md:w-auto">
                                 <button onClick={handleSave} className={`bg-slate-800 text-white flex-1 md:flex-none md:px-6 py-4 rounded-2xl font-black text-[10px] uppercase border border-slate-700 flex items-center justify-center gap-2 hover:bg-slate-700 transition-colors ${hasUnsaved ? 'pulse-save' : ''}`}>
@@ -2420,7 +2512,7 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
 
 {currentUser ? (
                             <>
-                                <StatsDashboard preds={preds} matches={matches} groupsLocked={groupsLocked} />
+                                <StatsDashboard preds={preds} matches={matches} groupsLocked={effectiveGroupsLocked} />
 {Object.keys(officialResults).length > 0 && (
 <div className="mb-8">
 <button onClick={()=>setShowComparison(!showComparison)} className="w-full glass p-4 rounded-2xl border border-purple-500/20 flex items-center justify-between hover:bg-white/[0.02] transition-colors">
@@ -2456,7 +2548,7 @@ return (<div key={m.id} className="flex items-center gap-2 text-[11px] py-1.5 bo
 </div></div>);})}
 </div>)}
 </div>)}
-                                <PredictionView matches={matches} currentPreds={preds} updateFn={handleUpdate} groupsLocked={groupsLocked} onLockGroups={handleLockGroups} r32Matchups={r32Matchups} knockoutLocked={knockoutLocked} onLockKnockout={onLockKnockout} />
+                                <PredictionView matches={matches} currentPreds={preds} updateFn={handleUpdate} groupsLocked={effectiveGroupsLocked} onLockGroups={handleLockGroups} r32Matchups={r32Matchups} knockoutLocked={effectiveKnockoutLocked} onLockKnockout={onLockKnockout} />
                             </>
                         ) : (
                             <div className="text-center py-20 md:py-40 glass rounded-[2rem] md:rounded-[4rem] border-2 border-dashed border-white/5">
@@ -2483,9 +2575,15 @@ return (<div key={m.id} className="flex items-center gap-2 text-[11px] py-1.5 bo
                                         <div className="flex items-center gap-3 overflow-hidden">
                                             <i className="fa-solid fa-user text-slate-600 text-sm"></i>
                                             <span className="font-bold truncate">{p.name}</span>
-                                            {p.groupsLocked && <span className="text-[8px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded font-black">{'\uD83D\uDD12'}</span>}
+                                            {p.groupsLocked && !isOverrideActive(p.name) && <span className="text-[8px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded font-black">{'\uD83D\uDD12'}</span>}
+                                            {isOverrideActive(p.name) && <span className="text-[8px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded font-black">🔓 {getOverrideRemaining(p.name)}</span>}
                                         </div>
-                                        <div className="flex items-center gap-1">
+                                        <div className="flex items-center gap-1 flex-wrap justify-end">
+{isOverrideActive(p.name) ? (
+  <button onClick={() => clearUserOverride(p.name)} className="text-yellow-400 hover:text-yellow-300 transition-all px-2 py-1 text-[10px] font-black uppercase rounded-lg border border-yellow-500/20 hover:bg-yellow-500/10" title="Quitar override">Quitar Override</button>
+) : (
+  <button onClick={() => unlockUserTemporarily(p.name, 15)} className="text-yellow-400 hover:text-yellow-300 transition-all px-2 py-1 text-[10px] font-black uppercase rounded-lg border border-yellow-500/20 hover:bg-yellow-500/10" title="Desbloquear 15 min">🔓 15 min</button>
+)}
 {canManageAdmins && p.name !== ADMIN_USER && (
   p.isAdmin ? (
     <button onClick={() => requestAdminToggle(p.name, false)} className="text-yellow-500/70 hover:text-yellow-500 transition-all p-1" title="Quitar Admin"><i className="fa-solid fa-user-minus text-xs"></i></button>
@@ -2554,15 +2652,21 @@ return (<div key={m.id} className="flex items-center gap-2 text-[11px] py-1.5 bo
                         )}
 
                         <div className="glass p-8 md:p-12 rounded-[2rem] md:rounded-[3.5rem] border border-red-500/10">
-                            <h3 className="text-2xl md:text-4xl font-black text-red-500 italic uppercase mb-8 md:mb-12"><i className="fa-solid fa-clipboard-check mr-3"></i>Resultados Oficiales</h3>
-                            <StatsDashboard preds={officialResults} matches={matches} groupsLocked={true} />
-                        <PredictionView matches={matches} currentPreds={officialResults} updateFn={(id, f, v) => handleUpdate(id, f, v, true)} isOfficial={true} groupsLocked={true} r32Matchups={r32Matchups} knockoutLocked={false} onLockKnockout={()=>{}} groupOverrides={groupOverrides} onReorderGroup={handleReorderGroup} />
+                            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8 md:mb-12">
+                                <h3 className="text-2xl md:text-4xl font-black text-red-500 italic uppercase"><i className="fa-solid fa-clipboard-check mr-3"></i>Resultados Oficiales</h3>
+                                <div className="flex items-center gap-3">
+                                    {officialDirty && <span className="text-[10px] font-black uppercase tracking-widest text-yellow-400">Cambios sin guardar</span>}
+                                    <button onClick={handleSaveOfficial} className={`px-6 py-3 rounded-2xl font-black text-[10px] uppercase flex items-center gap-2 transition-colors ${officialDirty ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}><i className="fa-solid fa-floppy-disk"></i>Guardar Oficiales</button>
+                                </div>
+                            </div>
+                            <StatsDashboard preds={officialDraft} matches={matches} groupsLocked={false} />
+                        <PredictionView matches={matches} currentPreds={officialDraft} updateFn={handleOfficialUpdate} isOfficial={true} groupsLocked={false} r32Matchups={r32Matchups} knockoutLocked={false} onLockKnockout={()=>{}} groupOverrides={groupOverrides} onReorderGroup={handleReorderGroup} />
                         </div>
                     </div>
                 )}
             </main>
             <footer className="max-w-7xl mx-auto px-6 mt-20 py-10 border-t border-white/5 text-center">
-                <p className="text-slate-700 text-xs font-bold uppercase tracking-widest">PRODE 26 · Mundial FIFA 2026 · Pasión o Razón · v13 🔥 PWA + Match Day</p>
+                <p className="text-slate-700 text-xs font-bold uppercase tracking-widest">PRODE 26 · Mundial FIFA 2026 · Pasión o Razón · v21 🔥 PWA + Match Day · OFFICIAL DRAFT MODE + OVERRIDE EFECTIVO</p>
             </footer>
         </div>
     );
@@ -2599,10 +2703,10 @@ root.render(<App />);
   if ('serviceWorker' in navigator) {
   // Evitar error en file:// (origin null). Solo registrar en http/https
   if (location && (location.protocol === 'http:' || location.protocol === 'https:')) {
-    var swCode = "var CACHE='prode26-v13';var URLS=['./','https://unpkg.com/react@18/umd/react.development.js','https://unpkg.com/react-dom@18/umd/react-dom.development.js','https://unpkg.com/@babel/standalone/babel.min.js','https://cdn.tailwindcss.com','https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js','https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js','https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css'];self.addEventListener('install',function(e){e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(URLS)}).then(function(){return self.skipWaiting()}))});self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(ks){return Promise.all(ks.filter(function(k){return k!==CACHE}).map(function(k){return caches.delete(k)}))}).then(function(){return self.clients.claim()}))});self.addEventListener('fetch',function(e){e.respondWith(caches.match(e.request).then(function(r){return r||fetch(e.request).then(function(nr){if(nr.ok&&e.request.method==='GET'){var cl=nr.clone();caches.open(CACHE).then(function(cache){cache.put(e.request,cl)})}return nr}).catch(function(){return e.request.mode==='navigate'?caches.match('./'):new Response('Offline',{status:503})})}))})";
+    var swCode = "var CACHE='prode26-v21';var URLS=['./','https://unpkg.com/react@18/umd/react.development.js','https://unpkg.com/react-dom@18/umd/react-dom.development.js','https://unpkg.com/@babel/standalone/babel.min.js','https://cdn.tailwindcss.com','https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js','https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js','https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css'];self.addEventListener('install',function(e){e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(URLS)}).then(function(){return self.skipWaiting()}))});self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(ks){return Promise.all(ks.filter(function(k){return k!==CACHE}).map(function(k){return caches.delete(k)}))}).then(function(){return self.clients.claim()}))});self.addEventListener('fetch',function(e){e.respondWith(caches.match(e.request).then(function(r){return r||fetch(e.request).then(function(nr){if(nr.ok&&e.request.method==='GET'){var cl=nr.clone();caches.open(CACHE).then(function(cache){cache.put(e.request,cl)})}return nr}).catch(function(){return e.request.mode==='navigate'?caches.match('./'):new Response('Offline',{status:503})})}))})";
     var swBlob = new Blob([swCode], { type: 'application/javascript' });
     var swUrl = URL.createObjectURL(swBlob);
-    navigator.serviceWorker.register(swUrl, { scope: '.' }).then(function(r) { console.log('SW registered:', r.scope); }).catch(function(e) { console.log('SW failed:', e); });
+    navigator.serviceWorker.register(swUrl, { scope: '.' }).then(function(r) { console.log('SW v21 registered:', r.scope); }).catch(function(e) { console.log('SW failed:', e); });
   }
 }
 })();

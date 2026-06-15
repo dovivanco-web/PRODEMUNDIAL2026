@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PRODE Mundial 2026 - Pasión o Razón v21</title>
+    <title>PRODE Mundial 2026 - Pasión o Razón v22.12</title>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -579,7 +579,7 @@ const ScrollTopBtn = () => {
         return () => window.removeEventListener('scroll', handler);
     }, []);
     if (!show) return null;
-    return (<button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="fixed bottom-8 right-8 z-[100] w-14 h-14 rounded-full bg-[#deff9a] text-black flex items-center justify-center shadow-2xl scroll-top-btn hover:shadow-[0_0_30px_rgba(222,255,154,0.4)]"><i className="fa-solid fa-arrow-up text-xl font-black"></i></button>);
+    return (<button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="fixed bottom-8 right-8 z-[100] w-14 h-14 rounded-full bg-[#deff9a] text-black flex items-center justify-center shadow-2xl scroll-top-btn hover:shadow-[0_0_30px_rgba(222,255,154,0.4)]"><i className="fa-solid fa-caret-up text-base text-xl font-black"></i></button>);
 };
 
 const RulesSection = memo(() => {
@@ -1141,18 +1141,53 @@ const FirebaseStatus = () => {
 const CHART_COLORS = ['#deff9a','#22c55e','#3b82f6','#f59e0b','#ef4444','#a855f7','#ec4899','#06b6d4','#f97316','#84cc16','#e879f9','#fb923c','#2dd4bf','#818cf8','#fbbf24','#34d399'];
 
 const ScoreEvolutionChart = memo(({ participants, officialResults, matches, r32Matchups, groupOverrides }) => {
+ const [mode, setMode] = useState('phase');
  const canvasRef = useRef(null);
  const chartRef = useRef(null);
 
  const chartData = useMemo(() => {
-  if (!officialResults || Object.keys(officialResults).length === 0) return null;
-  const groups = Object.keys(EQUIPOS_POR_GRUPO);
-  const phases = [...groups, '16avos', '8vos', '4tos', 'Semis', 'Final', 'Bonus'];
-  const oF = getFlow(officialResults, matches, r32Matchups, groupOverrides);
-  const allGD = groups.every(g => matches.filter(mt => mt.group === g).every(mt => typeof officialResults[mt.id]?.ga === 'number'));
+  if (!officialResults || Object.keys(officialResults).length === 0 || participants.length === 0) return null;
 
-  const datasets = participants.map((p, pi) => {
-   const uP = p.predictions || {};
+  const groups = Object.keys(EQUIPOS_POR_GRUPO);
+  const phaseLabels = [...groups, '16avos', '8vos', '4tos', 'Semis', 'Final', 'Bonus'];
+  const oF = getFlow(officialResults, matches, r32Matchups, groupOverrides);
+  const getResultSign = (a, b) => (a > b ? 1 : a < b ? -1 : 0);
+  const isPlayed = (m) => {
+   const o = officialResults[m.id];
+   return !!(o && typeof o.ga === 'number' && typeof o.gb === 'number');
+  };
+
+  const allGroupsClosed = groups.every(g =>
+   matches
+    .filter(mt => mt.group === g)
+    .every(mt => typeof officialResults[mt.id]?.ga === 'number' && typeof officialResults[mt.id]?.gb === 'number')
+  );
+
+  const getGroupPlacementPoints = (userFlow, officialFlow, group) => {
+   const finished = matches
+    .filter(mt => mt.group === group)
+    .every(mt => typeof officialResults[mt.id]?.ga === 'number' && typeof officialResults[mt.id]?.gb === 'number');
+   if (!finished) return 0;
+   let pts = 0;
+   userFlow.std[group].forEach((t, i) => {
+    if (officialFlow.std[group][i] && t.name === officialFlow.std[group][i].name) pts += 5;
+   });
+   return pts;
+  };
+
+  const getR32QualifiedPoints = (userFlow, officialFlow) => {
+   if (!allGroupsClosed) return 0;
+   const oT = getTeamsInPhase(officialFlow, matches, 'Dieciseisavos');
+   const uT = getTeamsInPhase(userFlow, matches, 'Dieciseisavos');
+   let pts = 0;
+   uT.forEach(team => {
+    if (team !== 'TBD' && oT.has(team)) pts += 10;
+   });
+   return pts;
+  };
+
+  const buildPhaseSeries = (participant) => {
+   const uP = participant.predictions || {};
    const uF = getFlow(uP, matches, r32Matchups);
    let cum = 0;
    const data = [];
@@ -1160,63 +1195,179 @@ const ScoreEvolutionChart = memo(({ participants, officialResults, matches, r32M
    groups.forEach(g => {
     let gP = 0;
     matches.filter(m => m.group === g).forEach(m => {
-     const o = officialResults[m.id]; if (!o || typeof o.ga !== 'number' || typeof o.gb !== 'number') return;
-     const u = uP[m.id]; if (!u || typeof u.ga !== 'number' || typeof u.gb !== 'number') return;
-     if ((u.ga > u.gb ? 1 : u.ga < u.gb ? -1 : 0) === (o.ga > o.gb ? 1 : o.ga < o.gb ? -1 : 0)) gP += 3;
-     if (u.ga === o.ga) gP += 2; if (u.gb === o.gb) gP += 2;
+     const o = officialResults[m.id];
+     const u = uP[m.id];
+     if (!o || typeof o.ga !== 'number' || typeof o.gb !== 'number') return;
+     if (!u || typeof u.ga !== 'number' || typeof u.gb !== 'number') return;
+     if (getResultSign(u.ga, u.gb) === getResultSign(o.ga, o.gb)) gP += 3;
+     if (u.ga === o.ga) gP += 2;
+     if (u.gb === o.gb) gP += 2;
     });
-    const fin = matches.filter(mt => mt.group === g).every(mt => typeof officialResults[mt.id]?.ga === 'number');
-    if (fin) uF.std[g].forEach((t, i) => { if (oF.std[g][i] && t.name === oF.std[g][i].name) gP += 5; });
-    if (allGD) {
+
+    gP += getGroupPlacementPoints(uF, oF, g);
+
+    if (allGroupsClosed) {
      const oT = getTeamsInPhase(oF, matches, 'Dieciseisavos');
      const uT = getTeamsInPhase(uF, matches, 'Dieciseisavos');
-     EQUIPOS_POR_GRUPO[g].forEach(team => { if (uT.has(team) && oT.has(team)) gP += 10; });
+     EQUIPOS_POR_GRUPO[g].forEach(team => {
+      if (uT.has(team) && oT.has(team)) gP += 10;
+     });
     }
-    cum += gP; data.push(cum);
+
+    cum += gP;
+    data.push(cum);
    });
 
-   // Dieciseisavos
-   let dP = 0;
+   let r32Pts = 0;
    matches.filter(m => m.phase === 'Dieciseisavos').forEach(m => {
-    const o = officialResults[m.id]; if (!o || typeof o.ga !== 'number') return;
-    const u = uP[m.id]; if (!u || typeof u.ga !== 'number' || typeof u.gb !== 'number') return;
-    if ((u.ga > u.gb ? 1 : u.ga < u.gb ? -1 : 0) === (o.ga > o.gb ? 1 : o.ga < o.gb ? -1 : 0)) dP += 4;
-    if (u.ga === o.ga) dP += 2; if (u.gb === o.gb) dP += 2;
+    const o = officialResults[m.id];
+    const u = uP[m.id];
+    if (!o || typeof o.ga !== 'number' || typeof o.gb !== 'number') return;
+    if (!u || typeof u.ga !== 'number' || typeof u.gb !== 'number') return;
+    if (getResultSign(u.ga, u.gb) === getResultSign(o.ga, o.gb)) r32Pts += 4;
+    if (u.ga === o.ga) r32Pts += 2;
+    if (u.gb === o.gb) r32Pts += 2;
    });
-   cum += dP; data.push(cum);
+   cum += r32Pts;
+   data.push(cum);
 
-   // Advance phases
-   [['Octavos',12],['Cuartos',15],['Semis',20],['Final',25]].forEach(([ph,pt]) => {
-    const oT = getTeamsInPhase(oF, matches, ph); const uT = getTeamsInPhase(uF, matches, ph);
-    let s = 0; if (oT.size > 0) uT.forEach(t => { if (t !== 'TBD' && oT.has(t)) s += pt; });
-    cum += s; data.push(cum);
+   [['Octavos', 12], ['Cuartos', 15], ['Semis', 20], ['Final', 25]].forEach(([phase, points]) => {
+    const oT = getTeamsInPhase(oF, matches, phase);
+    const uT = getTeamsInPhase(uF, matches, phase);
+    let s = 0;
+    if (oT.size > 0) uT.forEach(t => { if (t !== 'TBD' && oT.has(t)) s += points; });
+    cum += s;
+    data.push(cum);
    });
 
-   // Bonus (champion + third)
    let bonus = 0;
    if (oF._champion && oF._champion !== 'TBD' && uF._champion === oF._champion) bonus += 35;
    if (oF._third && oF._third !== 'TBD' && uF._third === oF._third) bonus += 15;
-   cum += bonus; data.push(cum);
+   cum += bonus;
+   data.push(cum);
 
+   return { labels: phaseLabels, data };
+  };
+
+  const buildMatchSeries = (participant) => {
+   const uP = participant.predictions || {};
+   let cum = 0;
+   const data = [];
+   const labels = [];
+   const playedMatches = matches.filter(isPlayed);
+   const awardedGroups = new Set();
+   let awardedR32 = false;
+   const awardedAdvance = { Octavos: false, Cuartos: false, Semis: false, Final: false, Bonus: false };
+
+   const tryAwardAdvancePhase = (phase, points) => {
+    if (awardedAdvance[phase]) return 0;
+    const oFnow = getFlow(officialResults, matches, r32Matchups, groupOverrides);
+    const oT = getTeamsInPhase(oFnow, matches, phase);
+    if (oT.size === 0) return 0;
+    awardedAdvance[phase] = true;
+    const uFnow = getFlow(uP, matches, r32Matchups);
+    const uT = getTeamsInPhase(uFnow, matches, phase);
+    let bonus = 0;
+    uT.forEach(t => {
+     if (t !== 'TBD' && oT.has(t)) bonus += points;
+    });
+    return bonus;
+   };
+
+   playedMatches.forEach(m => {
+    const o = officialResults[m.id];
+    const u = uP[m.id];
+    let stepPts = 0;
+
+    if (u && typeof u.ga === 'number' && typeof u.gb === 'number') {
+     if (m.phase === 'Grupos') {
+      if (getResultSign(u.ga, u.gb) === getResultSign(o.ga, o.gb)) stepPts += 3;
+      if (u.ga === o.ga) stepPts += 2;
+      if (u.gb === o.gb) stepPts += 2;
+     } else if (m.phase === 'Dieciseisavos') {
+      if (getResultSign(u.ga, u.gb) === getResultSign(o.ga, o.gb)) stepPts += 4;
+      if (u.ga === o.ga) stepPts += 2;
+      if (u.gb === o.gb) stepPts += 2;
+     }
+    }
+
+    cum += stepPts;
+
+    if (m.phase === 'Grupos') {
+     const groupClosed = matches
+      .filter(x => x.group === m.group)
+      .every(x => typeof officialResults[x.id]?.ga === 'number' && typeof officialResults[x.id]?.gb === 'number');
+
+     if (groupClosed && !awardedGroups.has(m.group)) {
+      awardedGroups.add(m.group);
+      const uFnow = getFlow(uP, matches, r32Matchups);
+      const oFnow = getFlow(officialResults, matches, r32Matchups, groupOverrides);
+      cum += getGroupPlacementPoints(uFnow, oFnow, m.group);
+     }
+
+     const nowAllGroupsClosed = groups.every(g =>
+      matches
+       .filter(x => x.group === g)
+       .every(x => typeof officialResults[x.id]?.ga === 'number' && typeof officialResults[x.id]?.gb === 'number')
+     );
+
+     if (nowAllGroupsClosed && !awardedR32) {
+      awardedR32 = true;
+      const uFnow = getFlow(uP, matches, r32Matchups);
+      const oFnow = getFlow(officialResults, matches, r32Matchups, groupOverrides);
+      cum += getR32QualifiedPoints(uFnow, oFnow);
+     }
+    }
+
+    cum += tryAwardAdvancePhase('Octavos', 12);
+    cum += tryAwardAdvancePhase('Cuartos', 15);
+    cum += tryAwardAdvancePhase('Semis', 20);
+    cum += tryAwardAdvancePhase('Final', 25);
+
+    if (!awardedAdvance.Bonus) {
+      const uFnow = getFlow(uP, matches, r32Matchups);
+      const oFnow = getFlow(officialResults, matches, r32Matchups, groupOverrides);
+      let bonus = 0;
+      if (oFnow._champion && oFnow._champion !== 'TBD' && uFnow._champion === oFnow._champion) bonus += 35;
+      if (oFnow._third && oFnow._third !== 'TBD' && uFnow._third === oFnow._third) bonus += 15;
+      if (bonus > 0) {
+        awardedAdvance.Bonus = true;
+        cum += bonus;
+      }
+    }
+
+    labels.push(m.phase === 'Grupos' ? `${m.group}-${m.id.split('-')[2]}` : m.id);
+    data.push(cum);
+   });
+
+   return { labels, data };
+  };
+
+  const datasets = participants.map((p, pi) => {
+   const series = mode === 'phase' ? buildPhaseSeries(p) : buildMatchSeries(p);
    return {
     label: p.name,
-    data,
+    data: series.data,
     borderColor: CHART_COLORS[pi % CHART_COLORS.length],
     backgroundColor: CHART_COLORS[pi % CHART_COLORS.length] + '20',
     borderWidth: 2,
-    pointRadius: 3,
-    pointHoverRadius: 6,
-    tension: 0.3,
+    pointRadius: mode === 'match' ? 2 : 3,
+    pointHoverRadius: mode === 'match' ? 4 : 6,
+    tension: 0.25,
     fill: false
    };
   });
 
-  return { labels: phases, datasets };
- }, [participants, officialResults, matches, r32Matchups, groupOverrides]);
+  const labels = mode === 'phase' ? buildPhaseSeries(participants[0]).labels : buildMatchSeries(participants[0]).labels;
+  return { labels, datasets };
+ }, [participants, officialResults, matches, r32Matchups, groupOverrides, mode]);
 
  useEffect(() => {
   if (!chartData || !canvasRef.current) return;
-  if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
+  if (chartRef.current) {
+   chartRef.current.destroy();
+   chartRef.current = null;
+  }
   const ctx = canvasRef.current.getContext('2d');
   chartRef.current = new Chart(ctx, {
    type: 'line',
@@ -1226,25 +1377,88 @@ const ScoreEvolutionChart = memo(({ participants, officialResults, matches, r32M
     maintainAspectRatio: false,
     interaction: { mode: 'index', intersect: false },
     plugins: {
-     legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 10, weight: 'bold', family: 'Inter' }, boxWidth: 12, padding: 16 } },
-     tooltip: { backgroundColor: '#0f172a', titleColor: '#deff9a', bodyColor: '#cbd5e1', borderColor: '#1e293b', borderWidth: 1, titleFont: { weight: 'bold', family: 'Inter' }, bodyFont: { family: 'Inter' }, cornerRadius: 12, padding: 12 }
+     legend: {
+      position: 'bottom',
+      labels: {
+       color: '#94a3b8',
+       font: { size: 10, weight: 'bold', family: 'Inter' },
+       boxWidth: 12,
+       padding: 16
+      }
+     },
+     tooltip: {
+      backgroundColor: '#0f172a',
+      titleColor: '#deff9a',
+      bodyColor: '#cbd5e1',
+      borderColor: '#1e293b',
+      borderWidth: 1,
+      titleFont: { weight: 'bold', family: 'Inter' },
+      bodyFont: { family: 'Inter' },
+      cornerRadius: 12,
+      padding: 12
+     }
     },
     scales: {
-     x: { ticks: { color: '#64748b', font: { size: 9, weight: 'bold', family: 'Inter' } }, grid: { color: 'rgba(255,255,255,0.03)' }, border: { color: '#1e293b' } },
-     y: { beginAtZero: true, ticks: { color: '#64748b', font: { size: 10, weight: 'bold', family: 'Inter' } }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { color: '#1e293b' } }
+     x: {
+      ticks: {
+       color: '#64748b',
+       font: { size: mode === 'match' ? 8 : 9, weight: 'bold', family: 'Inter' },
+       maxRotation: mode === 'match' ? 65 : 0,
+       minRotation: mode === 'match' ? 65 : 0,
+       autoSkip: true,
+       maxTicksLimit: mode === 'match' ? 28 : 20
+      },
+      grid: { color: 'rgba(255,255,255,0.03)' },
+      border: { color: '#1e293b' }
+     },
+     y: {
+      beginAtZero: true,
+      ticks: { color: '#64748b', font: { size: 10, weight: 'bold', family: 'Inter' } },
+      grid: { color: 'rgba(255,255,255,0.04)' },
+      border: { color: '#1e293b' }
+     }
     }
    }
   });
-  return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
- }, [chartData]);
+  return () => {
+   if (chartRef.current) {
+    chartRef.current.destroy();
+    chartRef.current = null;
+   }
+  };
+ }, [chartData, mode]);
 
  if (!chartData) return null;
  return (
   <div className="glass p-6 md:p-10 rounded-[2rem] md:rounded-[3.5rem] mt-10 border border-slate-700/30">
-   <h3 className="text-2xl md:text-4xl font-black italic uppercase tracking-tighter mb-6 md:mb-10">
-    <i className="fa-solid fa-chart-line text-[#deff9a] mr-3"></i>Evolución de Puntajes
-   </h3>
-   <div style={{ height: Math.max(350, participants.length * 20 + 200) + 'px', maxHeight: '600px' }}>
+   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6 md:mb-10">
+    <h3 className="text-2xl md:text-4xl font-black italic uppercase tracking-tighter">
+     <i className="fa-solid fa-chart-line text-[#deff9a] mr-3"></i>Evolución de Puntajes
+    </h3>
+    <div className="flex gap-2 self-start md:self-auto">
+     <button
+      onClick={() => setMode('phase')}
+      className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase border transition-all ${
+       mode === 'phase'
+        ? 'bg-[#deff9a]/15 text-[#deff9a] border-[#deff9a]'
+        : 'bg-slate-900 text-slate-500 border-slate-700 hover:border-slate-500'
+      }`}
+     >
+      Por fase
+     </button>
+     <button
+      onClick={() => setMode('match')}
+      className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase border transition-all ${
+       mode === 'match'
+        ? 'bg-[#deff9a]/15 text-[#deff9a] border-[#deff9a]'
+        : 'bg-slate-900 text-slate-500 border-slate-700 hover:border-slate-500'
+      }`}
+     >
+      Partido a partido
+     </button>
+    </div>
+   </div>
+   <div style={{ height: mode === 'match' ? '520px' : Math.max(350, participants.length * 20 + 200) + 'px', maxHeight: mode === 'match' ? '520px' : '600px' }}>
     <canvas ref={canvasRef}></canvas>
    </div>
   </div>
@@ -1558,6 +1772,453 @@ const MatchDayPanel = memo(({ matches, preds, officialResults, currentUser, part
 });
 
 
+
+const MisResultadosPanel = memo(({ currentUser, preds, officialResults, matches, r32Matchups, groupOverrides }) => {
+ const data = useMemo(() => {
+  if (!currentUser || !officialResults || Object.keys(officialResults).length === 0) return null;
+
+  const sign = (a, b) => (a > b ? 1 : a < b ? -1 : 0);
+  const safePreds = preds || {};
+  const playedMatchRows = [];
+
+  let resultHits = 0;
+  let exactScoreMatches = 0;
+  let exactTeamScores = 0;
+  let misses = 0;
+  let noPrediction = 0;
+  let totalPlayedPoints = 0;
+
+  matches.forEach(m => {
+   const o = officialResults[m.id];
+   if (!o) return;
+
+   const isScoredMatch = (m.phase === 'Grupos' || m.phase === 'Dieciseisavos') && typeof o.ga === 'number' && typeof o.gb === 'number';
+   if (!isScoredMatch) return;
+
+   const u = safePreds[m.id];
+   let pts = 0;
+   let status = 'none';
+   let resultHit = false;
+   let exactMatch = false;
+   let aHit = false;
+   let bHit = false;
+
+   if (u && typeof u.ga === 'number' && typeof u.gb === 'number') {
+    resultHit = sign(u.ga, u.gb) === sign(o.ga, o.gb);
+    aHit = u.ga === o.ga;
+    bHit = u.gb === o.gb;
+    exactMatch = aHit && bHit;
+
+    if (m.phase === 'Grupos') {
+     if (resultHit) pts += 3;
+    } else if (m.phase === 'Dieciseisavos') {
+     if (resultHit) pts += 4;
+    }
+    if (aHit) pts += 2;
+    if (bHit) pts += 2;
+
+    if (exactMatch) status = 'exact';
+    else if (pts > 0) status = 'partial';
+    else status = 'miss';
+   } else {
+    status = 'none';
+   }
+
+   totalPlayedPoints += pts;
+   if (status === 'none') noPrediction += 1;
+   else if (exactMatch) exactScoreMatches += 1;
+   else if (status === 'miss') misses += 1;
+
+   if (resultHit) resultHits += 1;
+   if (aHit) exactTeamScores += 1;
+   if (bHit) exactTeamScores += 1;
+
+   playedMatchRows.push({
+    id: m.id,
+    phase: m.phase,
+    group: m.group || null,
+    teamA: m.teamA,
+    teamB: m.teamB,
+    date: m.date,
+    time: m.time,
+    stadium: m.stadium,
+    userGa: u?.ga,
+    userGb: u?.gb,
+    offGa: o.ga,
+    offGb: o.gb,
+    pts,
+    status,
+    resultHit,
+    exactMatch,
+    aHit,
+    bHit
+   });
+  });
+
+  const uF = getFlow(safePreds, matches, r32Matchups);
+  const oF = getFlow(officialResults, matches, r32Matchups, groupOverrides);
+
+  const groupPlacementRows = Object.keys(EQUIPOS_POR_GRUPO).map(group => {
+   const finished = matches
+    .filter(mt => mt.group === group)
+    .every(mt => typeof officialResults[mt.id]?.ga === 'number' && typeof officialResults[mt.id]?.gb === 'number');
+
+   const rows = uF.std[group].map((team, idx) => ({
+    team: team.name,
+    userPos: idx + 1,
+    officialPos: (oF.std[group].findIndex(x => x.name === team.name) + 1) || null,
+    hit: finished && !!oF.std[group][idx] && oF.std[group][idx].name === team.name
+   }));
+
+   const exactCount = rows.filter(r => r.hit).length;
+   return {
+    group,
+    finished,
+    exactCount,
+    points: finished ? exactCount * 5 : 0,
+    rows
+   };
+  });
+
+  const allGroupsDone = groupPlacementRows.every(g => g.finished);
+
+  const qualifiedTeamsRows = allGroupsDone ? Array.from(getTeamsInPhase(uF, matches, 'Dieciseisavos')).map(team => ({
+   team,
+   hit: getTeamsInPhase(oF, matches, 'Dieciseisavos').has(team),
+   points: getTeamsInPhase(oF, matches, 'Dieciseisavos').has(team) ? 10 : 0,
+   phase: 'Dieciseisavos'
+  })).sort((a,b) => (a.hit === b.hit ? a.team.localeCompare(b.team) : (a.hit ? -1 : 1))) : [];
+
+  const phaseQualified = [['Octavos', 12], ['Cuartos', 15], ['Semis', 20], ['Final', 25]].map(([phase, points]) => {
+   const userTeams = Array.from(getTeamsInPhase(uF, matches, phase));
+   const officialTeams = getTeamsInPhase(oF, matches, phase);
+   const isResolved = officialTeams.size > 0;
+   const rows = userTeams.map(team => ({
+    team,
+    hit: isResolved && officialTeams.has(team),
+    points: isResolved && officialTeams.has(team) ? points : 0
+   })).sort((a,b) => (a.hit === b.hit ? a.team.localeCompare(b.team) : (a.hit ? -1 : 1)));
+   return {
+    phase,
+    isResolved,
+    points,
+    totalPoints: rows.reduce((s, r) => s + r.points, 0),
+    hits: rows.filter(r => r.hit).length,
+    rows
+   };
+  });
+
+  const bonusRows = [
+   {
+    label: 'Campeón',
+    predicted: uF._champion,
+    official: oF._champion,
+    hit: !!(oF._champion && oF._champion !== 'TBD' && uF._champion === oF._champion),
+    points: !!(oF._champion && oF._champion !== 'TBD' && uF._champion === oF._champion) ? 35 : 0
+   },
+   {
+    label: 'Tercer puesto',
+    predicted: uF._third,
+    official: oF._third,
+    hit: !!(oF._third && oF._third !== 'TBD' && uF._third === oF._third),
+    points: !!(oF._third && oF._third !== 'TBD' && uF._third === oF._third) ? 15 : 0
+   }
+  ];
+
+  const totalQualificationPoints = groupPlacementRows.reduce((s, g) => s + g.points, 0)
+    + qualifiedTeamsRows.reduce((s, r) => s + r.points, 0)
+    + phaseQualified.reduce((s, p) => s + p.totalPoints, 0)
+    + bonusRows.reduce((s, b) => s + b.points, 0);
+
+  return {
+   summary: {
+    totalPlayedPoints,
+    totalQualificationPoints,
+    grandTotal: totalPlayedPoints + totalQualificationPoints,
+    resultHits,
+    exactScoreMatches,
+    exactTeamScores,
+    misses,
+    noPrediction
+   },
+   playedGroups: playedMatchRows.filter(r => r.phase === 'Grupos').reduce((acc, row) => {
+    const key = row.group || 'Sin grupo';
+    acc[key] = acc[key] || [];
+    acc[key].push(row);
+    return acc;
+   }, {}),
+   playedR32: playedMatchRows.filter(r => r.phase === 'Dieciseisavos'),
+   groupPlacementRows,
+   qualifiedTeamsRows,
+   phaseQualified,
+   bonusRows
+  };
+ }, [currentUser, preds, officialResults, matches, r32Matchups, groupOverrides]);
+
+ if (!data) return null;
+
+ const statusClass = (status) => {
+  if (status === 'exact') return 'border-green-500/30 bg-green-500/10';
+  if (status === 'partial') return 'border-yellow-500/30 bg-yellow-500/10';
+  if (status === 'miss') return 'border-red-500/30 bg-red-500/10';
+  return 'border-slate-700 bg-slate-900/40';
+ };
+
+ const badgeClass = (status) => {
+  if (status === 'exact') return 'bg-green-500/20 text-green-400';
+  if (status === 'partial') return 'bg-yellow-500/20 text-yellow-400';
+  if (status === 'miss') return 'bg-red-500/20 text-red-400';
+  return 'bg-slate-700/30 text-slate-400';
+ };
+
+ const badgeLabel = (status) => {
+  if (status === 'exact') return 'EXACTO';
+  if (status === 'partial') return 'SUMÓ';
+  if (status === 'miss') return 'FALLADO';
+  return 'SIN CARGA';
+ };
+
+ return (
+  <div className="mt-4 space-y-6 view-enter">
+   <div className="glass p-6 md:p-8 rounded-[2rem] border border-[#deff9a]/15">
+    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+     <div>
+      <h3 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tight">
+       <i className="fa-solid fa-clipboard-check text-[#deff9a] mr-3"></i>Mis resultados
+      </h3>
+      <p className="text-slate-400 text-sm mt-2">Comparativa completa de <span className="text-white font-black">{currentUser}</span> frente a los resultados oficiales.</p>
+     </div>
+     <div className="text-right">
+      <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Puntos acumulados</div>
+      <div className="text-3xl font-black text-[#deff9a]">{data.summary.grandTotal}</div>
+     </div>
+    </div>
+
+    <div className="grid grid-cols-2 md:grid-cols-6 gap-3 md:gap-4">
+     <div className="stats-card rounded-2xl p-4 border border-slate-800/50">
+      <div className="text-2xl font-black text-[#deff9a]">{Object.values(data.playedGroups).reduce((a,b)=>a+b.length,0)+data.playedR32.length}</div>
+      <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mt-1">Partidos</div>
+     </div>
+     <div className="stats-card rounded-2xl p-4 border border-slate-800/50">
+      <div className="text-2xl font-black text-blue-400">{data.summary.totalQualificationPoints}</div>
+      <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mt-1">Clasificados</div>
+     </div>
+     <div className="stats-card rounded-2xl p-4 border border-slate-800/50">
+      <div className="text-2xl font-black text-green-400">{data.summary.resultHits}</div>
+      <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mt-1">Resultados OK</div>
+     </div>
+     <div className="stats-card rounded-2xl p-4 border border-slate-800/50">
+      <div className="text-2xl font-black text-emerald-300">{data.summary.exactScoreMatches}</div>
+      <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mt-1">Marcadores exactos</div>
+     </div>
+     <div className="stats-card rounded-2xl p-4 border border-slate-800/50">
+      <div className="text-2xl font-black text-yellow-400">{data.summary.exactTeamScores}</div>
+      <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mt-1">Goles exactos</div>
+     </div>
+     <div className="stats-card rounded-2xl p-4 border border-slate-800/50">
+      <div className="text-2xl font-black text-red-400">{data.summary.misses}</div>
+      <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mt-1">Fallados</div>
+     </div>
+    </div>
+   </div>
+
+   <div className="glass p-6 rounded-[2rem] border border-slate-700/30">
+    <h4 className="text-lg md:text-xl font-black text-white uppercase tracking-tight mb-4">
+     <i className="fa-solid fa-futbol text-[#deff9a] mr-2"></i>Partidos ya jugados
+    </h4>
+
+    <div className="space-y-5">
+     {Object.keys(data.playedGroups).length > 0 && Object.keys(data.playedGroups).map(group => (
+      <div key={group} className="bg-slate-900/30 border border-white/5 rounded-2xl p-4">
+       <div className="flex items-center justify-between mb-3">
+        <h5 className="font-black text-white uppercase">Grupo {group}</h5>
+        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{data.playedGroups[group].length} partidos</span>
+       </div>
+       <div className="space-y-2">
+        {data.playedGroups[group].map(row => (
+         <div key={row.id} className={`rounded-xl border p-3 ${statusClass(row.status)}`}>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+           <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1">
+             <span>{row.date}</span>
+             <span>·</span>
+             <span>{row.time}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm md:text-base font-black text-white">
+             <img src={`https://flagcdn.com/w40/${FLAGS[row.teamA] || 'un'}.png`} className="flag" alt={row.teamA} loading="lazy" />
+             <span>{row.teamA}</span>
+             <span className="text-slate-600">vs</span>
+             <span>{row.teamB}</span>
+             <img src={`https://flagcdn.com/w40/${FLAGS[row.teamB] || 'un'}.png`} className="flag" alt={row.teamB} loading="lazy" />
+            </div>
+           </div>
+
+           <div className="flex items-center gap-3 flex-wrap md:justify-end">
+            <div className="bg-slate-950/60 border border-slate-700 rounded-xl px-3 py-2 text-center min-w-[92px]">
+             <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Tu pronóstico</div>
+             <div className="text-lg font-black text-blue-400">{typeof row.userGa === 'number' ? row.userGa : '-'}<span className="text-slate-600">-</span>{typeof row.userGb === 'number' ? row.userGb : '-'}</div>
+            </div>
+            <div className="bg-slate-950/60 border border-[#deff9a]/15 rounded-xl px-3 py-2 text-center min-w-[92px]">
+             <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Oficial</div>
+             <div className="text-lg font-black text-[#deff9a]">{row.offGa}<span className="text-slate-600">-</span>{row.offGb}</div>
+            </div>
+            <div className="text-center min-w-[86px]">
+             <span className={`inline-flex px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${badgeClass(row.status)}`}>{badgeLabel(row.status)}</span>
+             <div className={`text-xl font-black mt-1 ${row.pts > 0 ? 'text-green-400' : 'text-slate-500'}`}>+{row.pts}</div>
+            </div>
+           </div>
+          </div>
+         </div>
+        ))}
+       </div>
+      </div>
+     ))}
+
+     {data.playedR32.length > 0 && (
+      <div className="bg-slate-900/30 border border-white/5 rounded-2xl p-4">
+       <div className="flex items-center justify-between mb-3">
+        <h5 className="font-black text-white uppercase">Dieciseisavos</h5>
+        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{data.playedR32.length} partidos</span>
+       </div>
+       <div className="space-y-2">
+        {data.playedR32.map(row => (
+         <div key={row.id} className={`rounded-xl border p-3 ${statusClass(row.status)}`}>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+           <div>
+            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1">
+             <span>{row.id}</span><span>·</span><span>{row.date}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm md:text-base font-black text-white">
+             <img src={`https://flagcdn.com/w40/${FLAGS[row.teamA] || 'un'}.png`} className="flag" alt={row.teamA} loading="lazy" />
+             <span>{row.teamA}</span>
+             <span className="text-slate-600">vs</span>
+             <span>{row.teamB}</span>
+             <img src={`https://flagcdn.com/w40/${FLAGS[row.teamB] || 'un'}.png`} className="flag" alt={row.teamB} loading="lazy" />
+            </div>
+           </div>
+           <div className="flex items-center gap-3 flex-wrap md:justify-end">
+            <div className="bg-slate-950/60 border border-slate-700 rounded-xl px-3 py-2 text-center min-w-[92px]">
+             <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Tu pronóstico</div>
+             <div className="text-lg font-black text-blue-400">{typeof row.userGa === 'number' ? row.userGa : '-'}<span className="text-slate-600">-</span>{typeof row.userGb === 'number' ? row.userGb : '-'}</div>
+            </div>
+            <div className="bg-slate-950/60 border border-[#deff9a]/15 rounded-xl px-3 py-2 text-center min-w-[92px]">
+             <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Oficial</div>
+             <div className="text-lg font-black text-[#deff9a]">{row.offGa}<span className="text-slate-600">-</span>{row.offGb}</div>
+            </div>
+            <div className="text-center min-w-[86px]">
+             <span className={`inline-flex px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${badgeClass(row.status)}`}>{badgeLabel(row.status)}</span>
+             <div className={`text-xl font-black mt-1 ${row.pts > 0 ? 'text-green-400' : 'text-slate-500'}`}>+{row.pts}</div>
+            </div>
+           </div>
+          </div>
+         </div>
+        ))}
+       </div>
+      </div>
+     )}
+    </div>
+   </div>
+
+   <div className="glass p-6 rounded-[2rem] border border-slate-700/30">
+    <h4 className="text-lg md:text-xl font-black text-white uppercase tracking-tight mb-4">
+     <i className="fa-solid fa-table-list text-[#deff9a] mr-2"></i>Posiciones de grupos y clasificados
+    </h4>
+
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+     {data.groupPlacementRows.map(group => (
+      <div key={group.group} className="bg-slate-900/30 border border-white/5 rounded-2xl p-4">
+       <div className="flex items-center justify-between mb-3">
+        <h5 className="font-black text-white uppercase">Grupo {group.group}</h5>
+        <div className="text-right">
+         <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Exactos</div>
+         <div className={`text-lg font-black ${group.finished ? 'text-[#deff9a]' : 'text-slate-500'}`}>{group.finished ? `${group.exactCount}/4 · +${group.points}` : 'Pendiente'}</div>
+        </div>
+       </div>
+       <div className="space-y-2">
+        {group.rows.map(row => (
+         <div key={`${group.group}-${row.team}`} className={`rounded-xl border px-3 py-2 flex items-center justify-between ${row.hit ? 'border-green-500/20 bg-green-500/10' : 'border-slate-700 bg-slate-950/40'}`}>
+          <div className="flex items-center gap-2 min-w-0">
+           <img src={`https://flagcdn.com/w40/${FLAGS[row.team] || 'un'}.png`} className="flag" alt={row.team} loading="lazy" />
+           <span className="font-bold text-sm text-white truncate">{row.team}</span>
+          </div>
+          <div className="text-[11px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">
+           Tu: #{row.userPos} · Oficial: #{row.officialPos || '-'}
+          </div>
+         </div>
+        ))}
+       </div>
+      </div>
+     ))}
+    </div>
+
+    <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+     <div className="bg-slate-900/30 border border-white/5 rounded-2xl p-4">
+      <div className="flex items-center justify-between mb-3">
+       <h5 className="font-black text-white uppercase">Clasificados a dieciseisavos</h5>
+       <span className="text-sm font-black text-[#deff9a]">+{data.qualifiedTeamsRows.reduce((s, r) => s + r.points, 0)}</span>
+      </div>
+      {data.qualifiedTeamsRows.length === 0 ? (
+       <p className="text-slate-500 text-sm">Todavía no hay todos los grupos cerrados.</p>
+      ) : (
+       <div className="flex flex-wrap gap-2">
+        {data.qualifiedTeamsRows.map(row => (
+         <span key={`r32-${row.team}`} className={`inline-flex items-center gap-2 px-3 py-2 rounded-full text-xs font-black border ${row.hit ? 'bg-green-500/15 text-green-400 border-green-500/30' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+          <img src={`https://flagcdn.com/w40/${FLAGS[row.team] || 'un'}.png`} className="flag" alt={row.team} loading="lazy" />
+          {row.team}
+         </span>
+        ))}
+       </div>
+      )}
+     </div>
+
+     <div className="bg-slate-900/30 border border-white/5 rounded-2xl p-4">
+      <div className="flex items-center justify-between mb-3">
+       <h5 className="font-black text-white uppercase">Bonus</h5>
+       <span className="text-sm font-black text-[#deff9a]">+{data.bonusRows.reduce((s, r) => s + r.points, 0)}</span>
+      </div>
+      <div className="space-y-2">
+       {data.bonusRows.map(row => (
+        <div key={row.label} className={`rounded-xl border px-3 py-3 flex items-center justify-between ${row.hit ? 'border-green-500/20 bg-green-500/10' : 'border-slate-700 bg-slate-950/40'}`}>
+         <div>
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">{row.label}</div>
+          <div className="font-black text-white mt-1">{row.predicted && row.predicted !== 'TBD' ? row.predicted : 'Sin definir'}</div>
+          <div className="text-xs text-slate-500 mt-1">Oficial: {row.official && row.official !== 'TBD' ? row.official : 'Pendiente'}</div>
+         </div>
+         <div className={`text-2xl font-black ${row.hit ? 'text-green-400' : 'text-slate-600'}`}>+{row.points}</div>
+        </div>
+       ))}
+      </div>
+     </div>
+    </div>
+
+    <div className="mt-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+     {data.phaseQualified.map(phase => (
+      <div key={phase.phase} className="bg-slate-900/30 border border-white/5 rounded-2xl p-4">
+       <div className="flex items-center justify-between mb-3">
+        <h5 className="font-black text-white uppercase">{phase.phase}</h5>
+        <span className={`text-sm font-black ${phase.isResolved ? 'text-[#deff9a]' : 'text-slate-500'}`}>{phase.isResolved ? `+${phase.totalPoints}` : 'Pendiente'}</span>
+       </div>
+       {phase.rows.length === 0 ? (
+        <p className="text-slate-500 text-sm">Sin selección definida todavía.</p>
+       ) : (
+        <div className="flex flex-wrap gap-2">
+         {phase.rows.map(row => (
+          <span key={`${phase.phase}-${row.team}`} className={`inline-flex items-center gap-2 px-3 py-2 rounded-full text-xs font-black border ${row.hit ? 'bg-green-500/15 text-green-400 border-green-500/30' : 'bg-slate-800/70 text-slate-400 border-slate-700'}`}>
+           <img src={`https://flagcdn.com/w40/${FLAGS[row.team] || 'un'}.png`} className="flag" alt={row.team} loading="lazy" />
+           {row.team}
+          </span>
+         ))}
+        </div>
+       )}
+      </div>
+     ))}
+    </div>
+   </div>
+  </div>
+ );
+});
+
+
 function App() {
     const [view, setView] = useState('ranking');
     const [participants, setParticipants] = useState([]);
@@ -1594,6 +2255,7 @@ function App() {
  const knockoutLockedRef = useRef(false);
  const officialDraftRef = useRef({});
  const lastHighlightedUser = useRef(null);
+ const rankingRef = useRef([]);
  const effectiveGroupsLockedRef = useRef(false);
  const effectiveKnockoutLockedRef = useRef(false);
      const { toasts, addToast, removeToast } = useToasts();
@@ -1907,6 +2569,7 @@ function App() {
             return { name: p.name, ...bd, efficiency: maxPossible > 1 ? Math.round(bd.total / maxPossible * 1000) / 10 : 0 };
         }).sort((a,b) => b.total - a.total);
     }, [participants, getScoreBreakdown, maxPossible]);
+    rankingRef.current = ranking;
 // Firebase real-time listeners
     useEffect(() => {
         const unsubP = db.ref('participants').on('value', snap => {
@@ -1928,7 +2591,9 @@ function App() {
             setOfficialDirty(false);
         });
         const unsubPR = db.ref('previousRanking').on('value', snap => {
-            setPrevRanking(snap.val() || {});
+            const prVal = snap.val() || {};
+            console.log('[DELTA] Firebase listener previousRanking:', JSON.stringify(prVal));
+            setPrevRanking(prVal);
         });
         const unsubGO = db.ref('groupOverrides').on('value', snap => {
             setGroupOverrides(snap.val() || {});
@@ -2022,6 +2687,18 @@ function App() {
 
     const handleSaveOfficial = useCallback(() => {
         const payload = officialDraftRef.current || {};
+        const snap = {};
+        const curRanking = rankingRef.current || [];
+        console.log('[DELTA] rankingRef.current length:', curRanking.length);
+        curRanking.forEach((p, idx) => { snap[safeName(p.name)] = idx + 1; });
+        console.log('[DELTA] snap to save:', JSON.stringify(snap));
+        if (Object.keys(snap).length > 0) {
+            db.ref('previousRanking').set(snap)
+                .then(() => { console.log('[DELTA] previousRanking SAVED OK'); setPrevRanking(snap); })
+                .catch(e => console.error('[DELTA] previousRanking FAILED:', e));
+        } else {
+            console.warn('[DELTA] snap is empty, nothing to save');
+        }
         setOfficialResults(payload);
         fbSaveOfficial(payload);
         setOfficialDirty(false);
@@ -2061,8 +2738,7 @@ function App() {
                     if (typeof updated.ga === 'number' && typeof updated.gb === 'number' && updated.ga !== updated.gb) { delete updated.winner; }
                 }
                 const newState = { ...prev, [id]: updated };
-                const _t=participants.map(pt=>({n:pt.name,t:getScoreBreakdown(pt.predictions).total})).sort((a,b)=>b.t-a.t);const _s={};_t.forEach((s,i)=>_s[safeName(s.n)]=i+1);db.ref('previousRanking').set(_s);
-                fbSaveOfficial(newState);
+                // v22.12: removed inline Firebase writes from setter (moved to handleSaveOfficial)
                 return newState;
             });
         } else { setPreds(prev => ({ ...prev, [id]: { ...(prev[id] || {}), [field]: val } })); setHasUnsaved(true); }
@@ -2377,7 +3053,7 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
                         <div className="glass p-8 md:p-16 rounded-[2rem] md:rounded-[4rem]">
                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 md:mb-20">
                                 <h3 className="text-4xl md:text-6xl font-black italic uppercase tracking-tighter"><i className="fa-solid fa-trophy text-[#deff9a] mr-4"></i>Ranking</h3>
-<button onClick={()=>{const el=document.getElementById("ranking-table");if(!el)return;html2canvas(el,{backgroundColor:"#0a0f1a",scale:2}).then(c=>{const a=document.createElement("a");a.download="PRODE26_Ranking.png";a.href=c.toDataURL();a.click();addToast("Imagen descargada","success");}).catch(()=>addToast("Error al exportar","error"));}} className="bg-slate-800 border border-slate-700 text-slate-400 hover:text-[#deff9a] px-4 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 transition-colors"><i className="fa-solid fa-camera"></i>Exportar</button>
+<button onClick={()=>{const el=document.getElementById("ranking-table");if(!el)return;html2canvas(el,{backgroundColor:"#0a0f1a",scale:3,scrollX:0,scrollY:0}).then(c=>{const a=document.createElement("a");a.download="PRODE26_Ranking.png";a.href=c.toDataURL();a.click();addToast("Imagen descargada","success");}).catch(()=>addToast("Error al exportar","error"));}} className="bg-slate-800 border border-slate-700 text-slate-400 hover:text-[#deff9a] px-4 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 transition-colors"><i className="fa-solid fa-camera"></i>Exportar</button>
                                 {participants.length > 5 && (
                                     <div className="relative w-full md:w-72">
                                         <i className="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm"></i>
@@ -2393,18 +3069,13 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
                                 </div>
                             ) : (
                                 <div className="overflow-auto max-h-[70vh] -mx-4 md:-mx-8">
-                <table id="ranking-table" className="w-full text-left min-w-[1400px]">
+                <table id="ranking-table" className="w-full text-left min-w-[1370px]">
                     <thead>
                         <tr className="text-[10px] md:text-[11px] text-[#deff9a] uppercase font-black tracking-widest border-b-2 border-[#deff9a]/20">
-                            <th className="p-2 sticky left-0 bg-[#0a0f1a] z-10 w-8">#</th>
-                            <th className="p-1 text-center w-10"></th>
-                            <th className="p-2 sticky left-8 bg-[#0a0f1a] z-10 min-w-[90px]">Nombre</th>
-                            <th className="p-2 text-center text-white text-xs">Pts</th>
- 
- 
- 
- <th className="p-1 text-center text-slate-400 text-xs" title="GAP con el de arriba">▲</th>
- <th className="p-1 text-center text-slate-400 text-xs" title="GAP con el de abajo">▼</th>
+                            <th className="p-2 sticky left-0 bg-[#0a0f1a] z-20 w-12 min-w-[48px]">#</th>
+                            <th className="p-2 sticky left-12 bg-[#0a0f1a] z-20 w-16 min-w-[64px] text-center text-slate-400 text-xs" title="Cambio de posición">Δ</th>
+                            <th className="p-2 sticky left-28 bg-[#0a0f1a] z-20 min-w-[100px] max-w-[100px]">Nombre</th>
+                            <th className="p-2 text-center text-white text-xs min-w-[60px]">Pts</th>
                             {Object.keys(EQUIPOS_POR_GRUPO).map(g => <th key={g} className="p-1 text-center text-slate-500 border-l border-white/5">{g}</th>)}
                             <th className="p-1 text-center border-l-2 border-[#deff9a]/20" title="Dieciseisavos">16°</th>
                             <th className="p-1 text-center" title="Octavos">8°</th>
@@ -2412,7 +3083,7 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
                             <th className="p-1 text-center" title="Semis">SF</th>
                             <th className="p-1 text-center" title="Final">F</th>
                             <th className="p-1 text-center text-purple-400 border-l border-white/5" title="Tercer puesto">3°</th>
-                            <th className="p-1 text-center text-yellow-400" title="Campeón">{'\uD83C\uDFC6'}</th>
+                            <th className="p-1 text-center text-yellow-400" title="Campeón">{'🏆'}</th>
                             <th className="p-2 text-center border-l-2 border-[#deff9a]/20">% Acierto</th>
                         </tr>
                     </thead>
@@ -2429,12 +3100,12 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
  `}
  style={i < 2 ? { position: 'sticky', top: (i*44) + 'px', zIndex: 25, background: '#0a0f1a' } : {}}
 >
-                            <td className={`p-2 sticky left-0 bg-[#0a0f1a] z-10 font-black text-lg ${i===0?'text-[#deff9a]':i<3?'text-slate-400':'text-slate-700'}`}>{i<3?medals[i]:(i+1)}</td>
-                            <td className="p-1 text-center text-xs font-black whitespace-nowrap">{(()=>{const pK=safeName(p.name);const pv=prevRanking[pK];if(typeof pv!=='number')return <span className="text-slate-600">{String.fromCharCode(9670)} 0</span>;const d=pv-(i+1);if(d>0)return <span className="text-green-400">{String.fromCharCode(9650)} {d}</span>;if(d<0)return <span className="text-red-400">{String.fromCharCode(9660)} {Math.abs(d)}</span>;return <span className="text-yellow-500">{String.fromCharCode(9670)} 0</span>;})()}</td>
-                            <td className="p-2 sticky left-8 bg-[#0a0f1a] z-10 font-black text-sm text-white max-w-[220px]">
+                            <td className={`p-2 sticky left-0 bg-[#0a0f1a] z-20 font-black text-lg w-12 min-w-[48px]  ${i===0?'text-[#deff9a]':i<3?'text-slate-400':'text-slate-700'}`}>{i<3?medals[i]:(i+1)}</td>
+                            <td className="p-2 sticky left-12 bg-[#0a0f1a] z-20 w-16 min-w-[64px] text-center text-xs font-black whitespace-nowrap">{(()=>{const pK=safeName(p.name);const prev=prevRanking[pK];if(typeof prev!=='number')return <span className="text-slate-600">—</span>;const diff=prev-(i+1);if(diff>0)return <span className="inline-flex items-center justify-center gap-1 text-green-400"><i className="fa-solid fa-caret-up text-base"></i><span>{diff}</span></span>;if(diff<0)return <span className="inline-flex items-center justify-center gap-1 text-red-400"><i className="fa-solid fa-caret-down text-base"></i><span>{Math.abs(diff)}</span></span>;return <span className="inline-flex items-center justify-center gap-1 text-yellow-400"><i className="fa-solid fa-equals text-[10px]"></i><span>0</span></span>;})()}</td>
+                            <td className="p-2 sticky left-28 bg-[#0a0f1a] z-20 font-black text-sm text-white min-w-[100px] max-w-[100px]">
  <div className="flex items-center gap-2">
   {currentUser === p.name && <span className="text-[#deff9a] text-[10px]">●</span>}
-  <span className="truncate max-w-[130px]">{p.name}</span>
+  <span className="truncate max-w-[100px]">{p.name}</span>
   {i === 0 && <span className="prize-badge prize-1"><i className="fa-solid fa-sack-dollar"></i> 80%</span>}
   {i === 1 && <span className="prize-badge prize-2"><i className="fa-solid fa-sack-dollar"></i> 20%</span>}
  </div>
@@ -2443,22 +3114,8 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
 
 
 
-<td className="p-1 text-center text-xs font-black">
- {(() => {
-  if (i === 0) return <span className="text-slate-600">-</span>;
-  const g = (ranking[i-1].total - p.total);
-  const cls = g > 15 ? 'gap-badge gap-good' : g >= 5 ? 'gap-badge gap-mid' : 'gap-badge gap-bad';
-  return <span className={cls}>+{g}</span>;
- })()}
-</td>
-<td className="p-1 text-center text-xs font-black">
- {(() => {
-  if (i === ranking.length - 1) return <span className="text-slate-600">-</span>;
-  const g = (p.total - ranking[i+1].total);
-  const cls = g > 15 ? 'gap-badge gap-good' : g >= 5 ? 'gap-badge gap-mid' : 'gap-badge gap-bad';
-  return <span className={cls}>-{g}</span>;
- })()}
-</td>
+
+
                             {Object.keys(EQUIPOS_POR_GRUPO).map(g => <td key={g} className={`p-1 text-center text-[13px] font-bold border-l border-white/5 ${p.groups[g]>0?'text-slate-300':'text-slate-700'}`}>{p.groups[g]}</td>)}
                             <td className={`p-1 text-center text-[13px] font-bold border-l-2 border-[#deff9a]/20 ${p.dieciseisavos>0?'text-blue-400':'text-slate-700'}`}>{p.dieciseisavos}</td>
                             <td className={`p-1 text-center text-[13px] font-bold ${p.octavos>0?'text-blue-400':'text-slate-700'}`}>{p.octavos}</td>
@@ -2515,39 +3172,22 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
                                 <StatsDashboard preds={preds} matches={matches} groupsLocked={effectiveGroupsLocked} />
 {Object.keys(officialResults).length > 0 && (
 <div className="mb-8">
-<button onClick={()=>setShowComparison(!showComparison)} className="w-full glass p-4 rounded-2xl border border-purple-500/20 flex items-center justify-between hover:bg-white/[0.02] transition-colors">
-<div className="flex items-center gap-3"><i className="fa-solid fa-code-compare text-purple-400"></i><span className="font-black text-sm uppercase tracking-wider text-white">Mis Predicciones vs Oficial</span></div>
+<button onClick={() => setShowComparison(!showComparison)} className="w-full glass p-4 rounded-2xl border border-purple-500/20 flex items-center justify-between hover:bg-white/[0.02] transition-colors">
+<div className="flex items-center gap-3"><i className="fa-solid fa-clipboard-check text-purple-400"></i><span className="font-black text-sm uppercase tracking-wider text-white">Mis resultados</span></div>
 <i className={`fa-solid fa-chevron-down text-slate-400 transition-transform duration-300 ${showComparison ? 'rotate-180' : ''}`}></i>
 </button>
 {showComparison && (
-<div className="mt-4 space-y-4 view-enter">
-{Object.keys(EQUIPOS_POR_GRUPO).map(g => {
-const gm = matches.filter(m => m.group === g);
-const hasOff = gm.some(m => officialResults[m.id] && typeof officialResults[m.id].ga === 'number');
-if (!hasOff) return null;
-return (<div key={g} className="bg-slate-900/30 rounded-2xl p-4 border border-white/5">
-<h4 className="font-black text-lg text-white mb-3">Grupo {g}</h4>
-<div className="space-y-2">{gm.map(m => {
-const o = officialResults[m.id]; const u = preds[m.id];
-if (!o || typeof o.ga !== 'number') return null;
-const hasU = u && typeof u.ga === 'number' && typeof u.gb === 'number';
-const uRes = hasU ? (u.ga > u.gb ? 1 : u.ga < u.gb ? -1 : 0) : null;
-const oRes = o.ga > o.gb ? 1 : o.ga < o.gb ? -1 : 0;
-const hitRes = hasU && uRes === oRes; const hitA = hasU && u.ga === o.ga; const hitB = hasU && u.gb === o.gb;
-let pts = 0; if (hitRes) pts += 3; if (hitA) pts += 2; if (hitB) pts += 2;
-return (<div key={m.id} className="flex items-center gap-2 text-[11px] py-1.5 border-b border-white/5">
-<span className="w-24 truncate font-bold text-slate-400">{m.teamA}</span>
-<span className={`font-black px-1.5 py-0.5 rounded ${hitA ? 'bg-green-500/20 text-green-400' : 'text-slate-500'}`}>{hasU ? u.ga : '-'}</span>
-<span className="text-slate-600">-</span>
-<span className={`font-black px-1.5 py-0.5 rounded ${hitB ? 'bg-green-500/20 text-green-400' : 'text-slate-500'}`}>{hasU ? u.gb : '-'}</span>
-<span className="text-slate-600 mx-1">vs</span>
-<span className="font-black text-[#deff9a] px-1.5">{o.ga}</span><span className="text-slate-600">-</span><span className="font-black text-[#deff9a] px-1.5">{o.gb}</span>
-<span className="w-24 truncate font-bold text-slate-400 text-right">{m.teamB}</span>
-<span className={`ml-auto font-black text-xs px-2 py-0.5 rounded ${pts > 0 ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>+{pts}</span>
-</div>);})}
-</div></div>);})}
-</div>)}
-</div>)}
+<MisResultadosPanel
+ currentUser={currentUser}
+ preds={preds}
+ officialResults={officialResults}
+ matches={matches}
+ r32Matchups={r32Matchups}
+ groupOverrides={groupOverrides}
+/>
+)}
+</div>
+)}
                                 <PredictionView matches={matches} currentPreds={preds} updateFn={handleUpdate} groupsLocked={effectiveGroupsLocked} onLockGroups={handleLockGroups} r32Matchups={r32Matchups} knockoutLocked={effectiveKnockoutLocked} onLockKnockout={onLockKnockout} />
                             </>
                         ) : (
@@ -2666,7 +3306,7 @@ return (<div key={m.id} className="flex items-center gap-2 text-[11px] py-1.5 bo
                 )}
             </main>
             <footer className="max-w-7xl mx-auto px-6 mt-20 py-10 border-t border-white/5 text-center">
-                <p className="text-slate-700 text-xs font-bold uppercase tracking-widest">PRODE 26 · Mundial FIFA 2026 · Pasión o Razón · v21 🔥 PWA + Match Day · OFFICIAL DRAFT MODE + OVERRIDE EFECTIVO</p>
+                <p className="text-slate-700 text-xs font-bold uppercase tracking-widest">PRODE 26 · Mundial FIFA 2026 · Pasión o Razón · v22.12 🔥 DELTA LIMPIO + LOGS + 100px</p>
             </footer>
         </div>
     );
@@ -2703,10 +3343,10 @@ root.render(<App />);
   if ('serviceWorker' in navigator) {
   // Evitar error en file:// (origin null). Solo registrar en http/https
   if (location && (location.protocol === 'http:' || location.protocol === 'https:')) {
-    var swCode = "var CACHE='prode26-v21';var URLS=['./','https://unpkg.com/react@18/umd/react.development.js','https://unpkg.com/react-dom@18/umd/react-dom.development.js','https://unpkg.com/@babel/standalone/babel.min.js','https://cdn.tailwindcss.com','https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js','https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js','https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css'];self.addEventListener('install',function(e){e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(URLS)}).then(function(){return self.skipWaiting()}))});self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(ks){return Promise.all(ks.filter(function(k){return k!==CACHE}).map(function(k){return caches.delete(k)}))}).then(function(){return self.clients.claim()}))});self.addEventListener('fetch',function(e){e.respondWith(caches.match(e.request).then(function(r){return r||fetch(e.request).then(function(nr){if(nr.ok&&e.request.method==='GET'){var cl=nr.clone();caches.open(CACHE).then(function(cache){cache.put(e.request,cl)})}return nr}).catch(function(){return e.request.mode==='navigate'?caches.match('./'):new Response('Offline',{status:503})})}))})";
+    var swCode = "var CACHE='prode26-v22-12';var URLS=['./','https://unpkg.com/react@18/umd/react.development.js','https://unpkg.com/react-dom@18/umd/react-dom.development.js','https://unpkg.com/@babel/standalone/babel.min.js','https://cdn.tailwindcss.com','https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js','https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js','https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css'];self.addEventListener('install',function(e){e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(URLS)}).then(function(){return self.skipWaiting()}))});self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(ks){return Promise.all(ks.filter(function(k){return k!==CACHE}).map(function(k){return caches.delete(k)}))}).then(function(){return self.clients.claim()}))});self.addEventListener('fetch',function(e){e.respondWith(caches.match(e.request).then(function(r){return r||fetch(e.request).then(function(nr){if(nr.ok&&e.request.method==='GET'){var cl=nr.clone();caches.open(CACHE).then(function(cache){cache.put(e.request,cl)})}return nr}).catch(function(){return e.request.mode==='navigate'?caches.match('./'):new Response('Offline',{status:503})})}))})";
     var swBlob = new Blob([swCode], { type: 'application/javascript' });
     var swUrl = URL.createObjectURL(swBlob);
-    navigator.serviceWorker.register(swUrl, { scope: '.' }).then(function(r) { console.log('SW v21 registered:', r.scope); }).catch(function(e) { console.log('SW failed:', e); });
+    navigator.serviceWorker.register(swUrl, { scope: '.' }).then(function(r) { console.log('SW v22.12 registered:', r.scope); }).catch(function(e) { console.log('SW failed:', e); });
   }
 }
 })();

@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PRODE Mundial 2026 - Pasión o Razón v22.12</title>
+    <title>PRODE Mundial 2026 - Pasión o Razón v22.13</title>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.26.2/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -156,7 +156,35 @@
 @media (max-width:768px){.my-rank-fab{left:16px;bottom:88px;padding:10px 12px;}}
 
 @media (max-width: 768px) { .match-input { width: 44px; height: 44px; font-size: 1rem; } h1 { font-size: 3.5rem !important; } }
-    </style>
+    
+/* v22.13 Mobile */
+@media (max-width: 640px) {
+ #ranking-table th,
+ #ranking-table td {
+   position: static !important;
+   left: auto !important;
+   z-index: auto !important;
+ }
+ #ranking-table { min-width: 700px !important; }
+ #ranking-table th,
+ #ranking-table td { padding: 4px 3px !important; font-size: 11px !important; }
+ #ranking-table .text-xl { font-size: 14px !important; }
+ #ranking-table .text-lg { font-size: 12px !important; }
+ .prize-badge { font-size: 8px !important; padding: 2px 4px !important; }
+ .gap-badge { font-size: 8px !important; min-width: 26px !important; }
+ header h1 { font-size: 3rem !important; }
+ header p { font-size: 0.75rem !important; }
+ .glass { padding: 10px !important; }
+ .stats-card { padding: 10px !important; }
+ .stats-card .text-3xl { font-size: 1.15rem !important; }
+ .my-rank-fab { bottom: 72px; left: 10px; padding: 7px 9px; font-size: 12px; }
+ .matchday-fab { bottom: 64px; right: 10px; width: 44px; height: 44px; }
+ .fb-status { font-size: 7px; padding: 4px 8px; }
+ .matchday-panel { margin: 14px auto; padding: 12px; }
+ nav { margin-left: 4px; margin-right: 4px; }
+ .overflow-auto { -webkit-overflow-scrolling: touch; }
+}
+</style>
 </head>
 <body>
     <div id="root"></div>
@@ -579,7 +607,7 @@ const ScrollTopBtn = () => {
         return () => window.removeEventListener('scroll', handler);
     }, []);
     if (!show) return null;
-    return (<button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="fixed bottom-8 right-8 z-[100] w-14 h-14 rounded-full bg-[#deff9a] text-black flex items-center justify-center shadow-2xl scroll-top-btn hover:shadow-[0_0_30px_rgba(222,255,154,0.4)]"><i className="fa-solid fa-caret-up text-base text-xl font-black"></i></button>);
+    return (<button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="fixed bottom-8 right-8 z-[100] w-14 h-14 rounded-full bg-[#deff9a] text-black flex items-center justify-center shadow-2xl scroll-top-btn hover:shadow-[0_0_30px_rgba(222,255,154,0.4)]"><i className="fa-solid fa-arrow-up text-xl font-black"></i></button>);
 };
 
 const RulesSection = memo(() => {
@@ -1140,7 +1168,7 @@ const FirebaseStatus = () => {
 
 const CHART_COLORS = ['#deff9a','#22c55e','#3b82f6','#f59e0b','#ef4444','#a855f7','#ec4899','#06b6d4','#f97316','#84cc16','#e879f9','#fb923c','#2dd4bf','#818cf8','#fbbf24','#34d399'];
 
-const ScoreEvolutionChart = memo(({ participants, officialResults, matches, r32Matchups, groupOverrides }) => {
+const ScoreEvolutionChart = memo(({ participants, officialResults, matches, r32Matchups, groupOverrides, currentUser }) => {
  const [mode, setMode] = useState('phase');
  const canvasRef = useRef(null);
  const chartRef = useRef(null);
@@ -1345,22 +1373,25 @@ const ScoreEvolutionChart = memo(({ participants, officialResults, matches, r32M
 
   const datasets = participants.map((p, pi) => {
    const series = mode === 'phase' ? buildPhaseSeries(p) : buildMatchSeries(p);
+   const isMe = currentUser && p.name === currentUser;
+   const baseColor = CHART_COLORS[pi % CHART_COLORS.length];
    return {
-    label: p.name,
+    label: isMe ? '>> ' + p.name : p.name,
     data: series.data,
-    borderColor: CHART_COLORS[pi % CHART_COLORS.length],
-    backgroundColor: CHART_COLORS[pi % CHART_COLORS.length] + '20',
-    borderWidth: 2,
-    pointRadius: mode === 'match' ? 2 : 3,
-    pointHoverRadius: mode === 'match' ? 4 : 6,
+    borderColor: baseColor,
+    backgroundColor: baseColor + '20',
+    borderWidth: isMe ? 4.5 : 2,
+    pointRadius: isMe ? (mode === 'match' ? 4 : 5) : (mode === 'match' ? 2 : 3),
+    pointHoverRadius: isMe ? 9 : 6,
     tension: 0.25,
-    fill: false
+    fill: false,
+    order: isMe ? 0 : 1
    };
   });
 
   const labels = mode === 'phase' ? buildPhaseSeries(participants[0]).labels : buildMatchSeries(participants[0]).labels;
   return { labels, datasets };
- }, [participants, officialResults, matches, r32Matchups, groupOverrides, mode]);
+ }, [participants, officialResults, matches, r32Matchups, groupOverrides, mode, currentUser]);
 
  useEffect(() => {
   if (!chartData || !canvasRef.current) return;
@@ -2592,7 +2623,7 @@ function App() {
         });
         const unsubPR = db.ref('previousRanking').on('value', snap => {
             const prVal = snap.val() || {};
-            console.log('[DELTA] Firebase listener previousRanking:', JSON.stringify(prVal));
+            console.log('[DELTA] listener:', JSON.stringify(prVal));
             setPrevRanking(prVal);
         });
         const unsubGO = db.ref('groupOverrides').on('value', snap => {
@@ -2689,15 +2720,13 @@ function App() {
         const payload = officialDraftRef.current || {};
         const snap = {};
         const curRanking = rankingRef.current || [];
-        console.log('[DELTA] rankingRef.current length:', curRanking.length);
+        console.log('[DELTA] rankingRef len:', curRanking.length);
         curRanking.forEach((p, idx) => { snap[safeName(p.name)] = idx + 1; });
-        console.log('[DELTA] snap to save:', JSON.stringify(snap));
+        console.log('[DELTA] snap:', JSON.stringify(snap));
         if (Object.keys(snap).length > 0) {
             db.ref('previousRanking').set(snap)
-                .then(() => { console.log('[DELTA] previousRanking SAVED OK'); setPrevRanking(snap); })
-                .catch(e => console.error('[DELTA] previousRanking FAILED:', e));
-        } else {
-            console.warn('[DELTA] snap is empty, nothing to save');
+                .then(() => { console.log('[DELTA] SAVED OK'); setPrevRanking(snap); })
+                .catch(e => console.error('[DELTA] FAILED:', e));
         }
         setOfficialResults(payload);
         fbSaveOfficial(payload);
@@ -2738,7 +2767,7 @@ function App() {
                     if (typeof updated.ga === 'number' && typeof updated.gb === 'number' && updated.ga !== updated.gb) { delete updated.winner; }
                 }
                 const newState = { ...prev, [id]: updated };
-                // v22.12: removed inline Firebase writes from setter (moved to handleSaveOfficial)
+                // v22.13: inline writes removed
                 return newState;
             });
         } else { setPreds(prev => ({ ...prev, [id]: { ...(prev[id] || {}), [field]: val } })); setHasUnsaved(true); }
@@ -3101,7 +3130,7 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
  style={i < 2 ? { position: 'sticky', top: (i*44) + 'px', zIndex: 25, background: '#0a0f1a' } : {}}
 >
                             <td className={`p-2 sticky left-0 bg-[#0a0f1a] z-20 font-black text-lg w-12 min-w-[48px]  ${i===0?'text-[#deff9a]':i<3?'text-slate-400':'text-slate-700'}`}>{i<3?medals[i]:(i+1)}</td>
-                            <td className="p-2 sticky left-12 bg-[#0a0f1a] z-20 w-16 min-w-[64px] text-center text-xs font-black whitespace-nowrap">{(()=>{const pK=safeName(p.name);const prev=prevRanking[pK];if(typeof prev!=='number')return <span className="text-slate-600">—</span>;const diff=prev-(i+1);if(diff>0)return <span className="inline-flex items-center justify-center gap-1 text-green-400"><i className="fa-solid fa-caret-up text-base"></i><span>{diff}</span></span>;if(diff<0)return <span className="inline-flex items-center justify-center gap-1 text-red-400"><i className="fa-solid fa-caret-down text-base"></i><span>{Math.abs(diff)}</span></span>;return <span className="inline-flex items-center justify-center gap-1 text-yellow-400"><i className="fa-solid fa-equals text-[10px]"></i><span>0</span></span>;})()}</td>
+                            <td className="p-2 sticky left-12 bg-[#0a0f1a] z-20 w-16 min-w-[64px] text-center text-xs font-black whitespace-nowrap">{(()=>{const pK=safeName(p.name);const prev=prevRanking[pK];if(typeof prev!=='number')return <span className="text-slate-600">—</span>;const diff=prev-(i+1);if(diff>0)return <span className="inline-flex items-center justify-center gap-1 text-green-400"><i className="fa-solid fa-caret-up text-base"></i><span>{diff}</span></span>;if(diff<0)return <span className="inline-flex items-center justify-center gap-1 text-red-400"><i className="fa-solid fa-arrow-down"></i><span>{Math.abs(diff)}</span></span>;return <span className="inline-flex items-center justify-center gap-1 text-yellow-400"><i className="fa-solid fa-equals text-xs"></i><span>0</span></span>;})()}</td>
                             <td className="p-2 sticky left-28 bg-[#0a0f1a] z-20 font-black text-sm text-white min-w-[100px] max-w-[100px]">
  <div className="flex items-center gap-2">
   {currentUser === p.name && <span className="text-[#deff9a] text-[10px]">●</span>}
@@ -3137,7 +3166,7 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
                 </div>
                             )}
                         </div>
-<ScoreEvolutionChart participants={participants} officialResults={officialResults} matches={matches} r32Matchups={r32Matchups} groupOverrides={groupOverrides} />
+<ScoreEvolutionChart participants={participants} officialResults={officialResults} matches={matches} r32Matchups={r32Matchups} groupOverrides={groupOverrides} currentUser={currentUser} />
                     </div>
                 )}
                 {view === 'prediction' && (
@@ -3306,7 +3335,7 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
                 )}
             </main>
             <footer className="max-w-7xl mx-auto px-6 mt-20 py-10 border-t border-white/5 text-center">
-                <p className="text-slate-700 text-xs font-bold uppercase tracking-widest">PRODE 26 · Mundial FIFA 2026 · Pasión o Razón · v22.12 🔥 DELTA LIMPIO + LOGS + 100px</p>
+                <p className="text-slate-700 text-xs font-bold uppercase tracking-widest">PRODE 26 · Mundial FIFA 2026 · Pasión o Razón · v22.13 🔥 CHART HIGHLIGHT + MOBILE + DELTA</p>
             </footer>
         </div>
     );
@@ -3343,10 +3372,10 @@ root.render(<App />);
   if ('serviceWorker' in navigator) {
   // Evitar error en file:// (origin null). Solo registrar en http/https
   if (location && (location.protocol === 'http:' || location.protocol === 'https:')) {
-    var swCode = "var CACHE='prode26-v22-12';var URLS=['./','https://unpkg.com/react@18/umd/react.development.js','https://unpkg.com/react-dom@18/umd/react-dom.development.js','https://unpkg.com/@babel/standalone/babel.min.js','https://cdn.tailwindcss.com','https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js','https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js','https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css'];self.addEventListener('install',function(e){e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(URLS)}).then(function(){return self.skipWaiting()}))});self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(ks){return Promise.all(ks.filter(function(k){return k!==CACHE}).map(function(k){return caches.delete(k)}))}).then(function(){return self.clients.claim()}))});self.addEventListener('fetch',function(e){e.respondWith(caches.match(e.request).then(function(r){return r||fetch(e.request).then(function(nr){if(nr.ok&&e.request.method==='GET'){var cl=nr.clone();caches.open(CACHE).then(function(cache){cache.put(e.request,cl)})}return nr}).catch(function(){return e.request.mode==='navigate'?caches.match('./'):new Response('Offline',{status:503})})}))})";
+    var swCode = "var CACHE='prode26-v22-13';var URLS=['./','https://unpkg.com/react@18/umd/react.development.js','https://unpkg.com/react-dom@18/umd/react-dom.development.js','https://unpkg.com/@babel/standalone@7.26.2/babel.min.js','https://cdn.tailwindcss.com','https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js','https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js','https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css'];self.addEventListener('install',function(e){e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(URLS)}).then(function(){return self.skipWaiting()}))});self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(ks){return Promise.all(ks.filter(function(k){return k!==CACHE}).map(function(k){return caches.delete(k)}))}).then(function(){return self.clients.claim()}))});self.addEventListener('fetch',function(e){e.respondWith(caches.match(e.request).then(function(r){return r||fetch(e.request).then(function(nr){if(nr.ok&&e.request.method==='GET'){var cl=nr.clone();caches.open(CACHE).then(function(cache){cache.put(e.request,cl)})}return nr}).catch(function(){return e.request.mode==='navigate'?caches.match('./'):new Response('Offline',{status:503})})}))})";
     var swBlob = new Blob([swCode], { type: 'application/javascript' });
     var swUrl = URL.createObjectURL(swBlob);
-    navigator.serviceWorker.register(swUrl, { scope: '.' }).then(function(r) { console.log('SW v22.12 registered:', r.scope); }).catch(function(e) { console.log('SW failed:', e); });
+    navigator.serviceWorker.register(swUrl, { scope: '.' }).then(function(r) { console.log('SW v22.13 registered:', r.scope); }).catch(function(e) { console.log('SW failed:', e); });
   }
 }
 })();

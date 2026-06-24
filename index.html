@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PRODE Mundial 2026 - Pasión o Razón v22.13</title>
+    <title>PRODE Mundial 2026 - Pasión o Razón v22.19</title>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone@7.26.2/babel.min.js"></script>
@@ -69,10 +69,10 @@
         .fb-online { background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.3); }
         .fb-offline { background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3); }
         
- .bracket-container { display: flex; align-items: flex-start; gap: 0; overflow-x: auto; padding: 24px 12px; min-height: 600px; }
- .bracket-round { display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 200px; position: relative; }
- .bracket-round-title { font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.15em; color: #deff9a; margin-bottom: 16px; text-align: center; white-space: nowrap; }
- .bracket-slot { background: rgba(15,23,42,0.7); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 10px 12px; width: 185px; margin: 6px 0; backdrop-filter: blur(10px); transition: all 0.3s ease; opacity: 0; animation: fadeSlideIn 0.5s ease forwards; }
+ .bracket-container { display: flex; align-items: flex-start; gap: 0; overflow-x: auto; padding: 8px 12px 24px; min-height: 600px; }
+ .bracket-round { display: flex; flex-direction: column; align-items: center; min-width: 200px; position: relative; box-sizing: border-box; }
+ .bracket-round-title { font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.18em; color: #deff9a; text-align: center; white-space: nowrap; background: rgba(2,4,10,0.6); padding: 4px 12px; border-radius: 8px; border: 1px solid rgba(222,255,154,0.15); }
+ .bracket-slot { background: rgba(15,23,42,0.7); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 8px 12px; width: 185px; height: 72px; box-sizing: border-box; backdrop-filter: blur(10px); transition: all 0.3s ease; opacity: 0; animation: fadeSlideIn 0.5s ease forwards; display: flex; flex-direction: column; justify-content: center; }
  .bracket-slot:hover { border-color: rgba(222,255,154,0.3); transform: scale(1.03); box-shadow: 0 0 20px rgba(222,255,154,0.08); }
  .bracket-slot.bracket-winner { border-color: rgba(222,255,154,0.4); background: rgba(222,255,154,0.05); }
  .bracket-slot.bracket-champion { border: 2px solid #deff9a; box-shadow: 0 0 30px rgba(222,255,154,0.25); background: rgba(222,255,154,0.08); }
@@ -81,12 +81,12 @@
  .bracket-team-name.is-winner { color: #deff9a; font-weight: 900; }
  .bracket-team-score { font-size: 11px; font-weight: 900; color: #deff9a; margin-left: auto; min-width: 16px; text-align: center; }
  .bracket-vs { font-size: 7px; font-weight: 900; color: #334155; text-align: center; letter-spacing: 0.2em; }
- .bracket-connector-col { display: flex; flex-direction: column; justify-content: center; width: 32px; min-width: 32px; position: relative; }
+ .bracket-connector-col { display: flex; flex-direction: column; width: 32px; min-width: 32px; position: relative; }
  .bracket-connector-col svg { width: 32px; overflow: visible; }
  .bracket-phase-label { font-size: 8px; color: #475569; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; text-align: center; margin-top: 2px; }
  .bracket-slot .bracket-penalties { font-size: 8px; color: #ef4444; font-weight: 800; text-align: center; margin-top: 2px; }
  .stagger-fade { opacity: 0; animation: fadeSlideIn 0.5s ease forwards; }
- @media (max-width: 768px) { .bracket-slot { width: 155px; padding: 8px 10px; } .bracket-round { min-width: 170px; } .bracket-team-name { max-width: 85px; font-size: 9px; } }
+ @media (max-width: 768px) { .bracket-slot { width: 155px; padding: 6px 10px; height: 66px; } .bracket-round { min-width: 170px; } .bracket-team-name { max-width: 85px; font-size: 9px; } .bracket-round-title { font-size: 8px; padding: 3px 8px; } }
 
  
  .matchday-overlay { position: fixed; inset: 0; z-index: 300; background: rgba(0,0,0,0.8); backdrop-filter: blur(12px); overflow-y: auto; animation: fadeSlideIn 0.3s ease; }
@@ -895,7 +895,7 @@ const PlayoffWinnerRow = memo(({ m, teamA, teamB, preds, onUpdate, disabled }) =
     );
 });
 
-const PredictionView = memo(({ matches, currentPreds, updateFn, isOfficial, groupsLocked, onLockGroups, r32Matchups, knockoutLocked, onLockKnockout, groupOverrides, onReorderGroup }) => {
+const PredictionView = memo(({ matches, currentPreds, updateFn, isOfficial, groupsLocked, onLockGroups, r32Matchups, knockoutLocked, onLockKnockout, groupOverrides, onReorderGroup, knockoutOpen }) => {
     const flow = useMemo(() => getFlow(currentPreds, matches, r32Matchups, isOfficial ? groupOverrides : null), [matches, currentPreds, r32Matchups, isOfficial, groupOverrides]);
     const [subPhase, setSubPhase] = useState('grupos');
  const [bracketMode, setBracketMode] = useState(false);
@@ -914,7 +914,7 @@ const PredictionView = memo(({ matches, currentPreds, updateFn, isOfficial, grou
         });
     }, [matches, currentPreds]);
 
-    const canAccessKnockout = groupsLocked || isOfficial;
+    const canAccessKnockout = groupsLocked || isOfficial || knockoutOpen;
     const phaseLabels = { 'Octavos': '12 pts/equipo clasificado', 'Cuartos': '15 pts/equipo clasificado', 'Semis': '20 pts/equipo clasificado', 'Tercer Puesto': '15 pts', 'Final': '25 pts/equipo + 35 campeón' };
 
     return (
@@ -1058,6 +1058,15 @@ const PredictionView = memo(({ matches, currentPreds, updateFn, isOfficial, grou
                             </div>
                         </div>
                     )}
+                    {knockoutOpen && !isOfficial && !knockoutLocked && (
+                        <div className="glass p-6 rounded-2xl border border-yellow-500/30 flex items-center justify-center gap-4 text-center bg-yellow-500/5">
+                            <i className="fa-solid fa-bolt text-yellow-400 text-2xl"></i>
+                            <div>
+                                <p className="font-black text-yellow-400 uppercase tracking-widest text-sm">⚡ Eliminatorias Habilitadas</p>
+                                <p className="text-slate-400 text-xs mt-1">Los cruces mostrados son los oficiales calculados desde los resultados de grupos. ¡Cargá tus pronósticos!</p>
+                            </div>
+                        </div>
+                    )}
                     <div className="flex gap-3 justify-center mb-8">
                         <button onClick={() => setBracketMode(false)} className={`px-6 py-3 rounded-2xl font-black text-xs uppercase border-2 transition-all flex items-center gap-2 ${!bracketMode ? 'subtab-active border-[#deff9a]' : 'border-slate-700 text-slate-500 hover:border-slate-500'}`}>
                             <i className="fa-solid fa-list-ul"></i> Lista
@@ -1073,7 +1082,7 @@ const PredictionView = memo(({ matches, currentPreds, updateFn, isOfficial, grou
                             <div>
                                 <h2 className="text-4xl md:text-7xl font-black italic uppercase tracking-tighter mb-4 md:mb-6 border-l-8 pl-6 md:pl-8 text-white border-[#deff9a]">Dieciseisavos</h2>
                                 <p className="text-xs font-black uppercase tracking-widest mb-8 md:mb-12 pl-8 md:pl-16 text-slate-500">4 pts resultado + 2 pts/gol exacto</p>
-                                {(!isOfficial && (!r32Matchups || !r32Matchups['M73'])) ? (
+                                {(!isOfficial && !knockoutOpen && (!r32Matchups || !r32Matchups['M73'])) ? (
                             <div className="glass p-10 rounded-3xl border border-yellow-500/20 text-center">
                                 <i className="fa-solid fa-hourglass-half text-yellow-400 text-4xl"></i>
                                 <p className="font-black uppercase tracking-widest text-yellow-400 mt-4">Esperando cruces reales del administrador</p>
@@ -1522,20 +1531,20 @@ const BracketSlot = memo(({ teamA, teamB, scoreA, scoreB, winner, penalties, del
  );
 });
 
-const BracketConnectors = ({ count, slotH, gap }) => {
- const totalH = count * (slotH + gap) - gap;
- const pairH = slotH + gap;
+const BracketConnectors = ({ parentCount, parentSlotH, parentGap, topOffset }) => {
+ const totalH = parentCount * (parentSlotH + parentGap) - parentGap + topOffset;
  const paths = [];
- for (let i = 0; i < count; i += 2) {
-  const y1 = i * pairH + slotH / 2;
-  const y2 = (i + 1) * pairH + slotH / 2;
+ for (let i = 0; i < parentCount; i += 2) {
+  const y1 = topOffset + i * (parentSlotH + parentGap) + parentSlotH / 2;
+  const y2 = topOffset + (i + 1) * (parentSlotH + parentGap) + parentSlotH / 2;
   const midY = (y1 + y2) / 2;
-  paths.push(<path key={i} d={`M0,${y1} L16,${y1} L16,${midY} L32,${midY}`} stroke="#1e293b" strokeWidth="2" fill="none" />);
-  paths.push(<path key={i+1} d={`M0,${y2} L16,${y2} L16,${midY}`} stroke="#1e293b" strokeWidth="2" fill="none" />);
+  paths.push(<path key={`v1-${i}`} d={`M0,${y1} L16,${y1} L16,${midY}`} stroke="#334155" strokeWidth="1.5" fill="none" />);
+  paths.push(<path key={`v2-${i}`} d={`M0,${y2} L16,${y2} L16,${midY}`} stroke="#334155" strokeWidth="1.5" fill="none" />);
+  paths.push(<path key={`h-${i}`} d={`M16,${midY} L32,${midY}`} stroke="#334155" strokeWidth="1.5" fill="none" />);
  }
  return (
-  <div className="bracket-connector-col">
-   <svg height={totalH} viewBox={`0 0 32 ${totalH}`} style={{ display: 'block' }}>
+  <div className="bracket-connector-col" style={{ alignSelf: 'flex-start' }}>
+   <svg height={totalH} viewBox={`0 0 32 ${totalH}`} style={{ display: 'block', overflow: 'visible' }}>
     {paths}
    </svg>
   </div>
@@ -1583,29 +1592,40 @@ const BracketView = memo(({ matches, preds, flow, r32Matchups }) => {
   { label: '3° / Final', ids: finalIds }
  ];
 
- const slotH = 80;
- const gap = 12;
+ const slotH = 72;
+ const baseGap = 14;
+ const titleSpace = 32;
  let idx = 0;
+
+ const getRoundSlotGap = (ri) => (slotH + baseGap) * Math.pow(2, ri) - slotH;
 
  return (
   <div className="view-enter">
-   <div className="bracket-container" style={{ alignItems: 'center' }}>
-    {rounds.map((round, ri) => (
+   <div className="bracket-container" style={{ alignItems: 'flex-start' }}>
+    {rounds.map((round, ri) => {
+     const roundSlotGap = getRoundSlotGap(ri);
+     const roundPadding = ri === 0 ? titleSpace : titleSpace + (roundSlotGap - baseGap) / 2;
+     return (
      <React.Fragment key={ri}>
-      <div className="bracket-round">
-       <div className="bracket-round-title">{round.label}</div>
+      <div className="bracket-round" style={{ paddingTop: roundPadding + 'px', justifyContent: 'flex-start', position: 'relative' }}>
+       <div className="bracket-round-title" style={{ position: 'absolute', top: '8px', left: '50%', transform: 'translateX(-50%)', margin: 0 }}>{round.label}</div>
        {round.ids.map((mid, mi) => {
         const d = getSlotData(mid);
         const isChamp = mid === 'M104' && flow._champion && flow._champion !== 'TBD';
         idx++;
-        return <BracketSlot key={mid} {...d} delay={idx} isChampion={isChamp} />;
+        return (
+         <div key={mid} style={{ marginBottom: (mi < round.ids.length - 1 ? roundSlotGap : 0) + 'px' }}>
+          <BracketSlot {...d} delay={idx} isChampion={isChamp} />
+         </div>
+        );
        })}
       </div>
       {ri < rounds.length - 1 && (
-       <BracketConnectors count={round.ids.length} slotH={slotH} gap={gap} />
+       <BracketConnectors parentCount={round.ids.length} parentSlotH={slotH} parentGap={roundSlotGap} topOffset={roundPadding} />
       )}
      </React.Fragment>
-    ))}
+     );
+    })}
     {flow._champion && flow._champion !== 'TBD' && (
      <div className="bracket-round" style={{ minWidth: 140 }}>
       <div className="bracket-round-title">🏆 Campeón</div>
@@ -2260,6 +2280,7 @@ function App() {
     const [preds, setPreds] = useState({});
     const [groupsLocked, setGroupsLocked] = useState(false);
     const [knockoutLocked, setKnockoutLocked] = useState(false);
+    const [knockoutOpen, setKnockoutOpen] = useState(false);
     const [r32Matchups, setR32Matchups] = useState({});
     const [groupOverrides, setGroupOverrides] = useState({});
     const [prevRanking, setPrevRanking] = useState({});
@@ -2340,7 +2361,7 @@ function App() {
  officialDraftRef.current = officialDraft;
  const overrideActiveCurrentUser = !!(currentUser && isOverrideActive(currentUser));
  const effectiveGroupsLocked = groupsLocked && !overrideActiveCurrentUser;
- const effectiveKnockoutLocked = knockoutLocked && !overrideActiveCurrentUser;
+ const effectiveKnockoutLocked = !knockoutOpen && knockoutLocked && !overrideActiveCurrentUser;
  effectiveGroupsLockedRef.current = effectiveGroupsLocked;
  effectiveKnockoutLockedRef.current = effectiveKnockoutLocked;
     useEffect(() => {
@@ -2629,36 +2650,76 @@ function App() {
         const unsubGO = db.ref('groupOverrides').on('value', snap => {
             setGroupOverrides(snap.val() || {});
         });
-        return () => { db.ref('participants').off('value', unsubP); db.ref('officialResults').off('value', unsubO); db.ref('previousRanking').off('value', unsubPR); db.ref('groupOverrides').off('value', unsubGO); };
+        const unsubKO = db.ref('knockoutOpen').on('value', snap => {
+            setKnockoutOpen(snap.val() === true);
+        });
+        return () => { db.ref('participants').off('value', unsubP); db.ref('officialResults').off('value', unsubO); db.ref('previousRanking').off('value', unsubPR); db.ref('groupOverrides').off('value', unsubGO); db.ref('knockoutOpen').off('value', unsubKO); };
     }, []);
 
-    // Auto-compute R32 matchups from official results
+    // Auto-compute R32 matchups progressively as groups close (v22.19)
     useEffect(() => {
         if (!matches || matches.length === 0) return;
-        const groupMatches = matches.filter(m => m.phase === 'Grupos');
-        const allGroupsDone = groupMatches.every(m => {
-            const o = officialResults[m.id];
-            return o && typeof o.ga === 'number' && typeof o.gb === 'number';
+
+        const groupClosedMap = {};
+        Object.keys(EQUIPOS_POR_GRUPO).forEach(g => {
+            groupClosedMap[g] = matches.filter(m => m.group === g).every(m => {
+                const o = officialResults[m.id];
+                return o && typeof o.ga === 'number' && typeof o.gb === 'number';
+            });
         });
-        if (!allGroupsDone) return;
+        const allGroupsDone = Object.values(groupClosedMap).every(v => v);
+
+        // Slots that depend ONLY on 2 specific groups (not best thirds)
+        const slotDeps = {
+            'M73': ['A', 'B'],
+            'M75': ['F', 'C'],
+            'M76': ['C', 'F'],
+            'M78': ['E', 'I'],
+            'M83': ['K', 'L'],
+            'M84': ['H', 'J'],
+            'M86': ['J', 'H'],
+            'M88': ['D', 'G']
+        };
+        // Slots that depend on best thirds (need ALL groups closed)
+        const slotsBestThirds = ['M74', 'M77', 'M79', 'M80', 'M81', 'M82', 'M85', 'M87'];
+
         const officialFlow = getFlow(officialResults, matches, null, groupOverrides);
-        const computed = {};
-        for (let i = 73; i <= 88; i++) {
-            const mid = `M${i}`;
-            if (officialFlow[mid]) {
-                computed[mid] = { a: officialFlow[mid].a || 'TBD', b: officialFlow[mid].b || 'TBD' };
+        const computed = { ...(r32Matchups || {}) };
+        let changed = false;
+
+        // Progressive: process direct-dep slots as their groups close
+        Object.entries(slotDeps).forEach(([mid, groups]) => {
+            if (groups.every(g => groupClosedMap[g])) {
+                const slot = officialFlow[mid];
+                if (slot && slot.a !== 'TBD' && slot.b !== 'TBD') {
+                    if (!computed[mid] || computed[mid].a !== slot.a || computed[mid].b !== slot.b) {
+                        computed[mid] = { a: slot.a, b: slot.b };
+                        changed = true;
+                    }
+                }
             }
+        });
+
+        // Best-third slots only when all groups done
+        if (allGroupsDone) {
+            slotsBestThirds.forEach(mid => {
+                const slot = officialFlow[mid];
+                if (slot) {
+                    const a = slot.a || 'TBD';
+                    const b = slot.b || 'TBD';
+                    if (!computed[mid] || computed[mid].a !== a || computed[mid].b !== b) {
+                        computed[mid] = { a, b };
+                        changed = true;
+                    }
+                }
+            });
         }
-        const hasValid = Object.values(computed).some(v => v.a !== 'TBD' || v.b !== 'TBD');
-        if (hasValid) {
-            const currentStr = JSON.stringify(r32Matchups || {});
-            const newStr = JSON.stringify(computed);
-            if (currentStr !== newStr) {
-                setR32Matchups(computed);
-                fbSaveR32Matchups(computed);
-            }
+
+        if (changed && Object.keys(computed).length > 0) {
+            setR32Matchups(computed);
+            fbSaveR32Matchups(computed);
         }
-    }, [officialResults, matches]);
+    }, [officialResults, matches, groupOverrides]);
 
     useEffect(() => {
         if (!currentUser || !hasUnsaved) return;
@@ -2958,6 +3019,16 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
   el.classList.add('pulse-highlight');
   setTimeout(() => el.classList.remove('pulse-highlight'), 1200);
  }, [view, currentUser, addToast]);
+
+    const handleToggleKnockoutOpen = useCallback(() => {
+        const newValue = !knockoutOpen;
+        const msg = newValue 
+            ? '⚡ ¿HABILITAR la carga de eliminatorias para todos los usuarios?' 
+            : '🔒 ¿BLOQUEAR la carga de eliminatorias?';
+        if (!window.confirm(msg)) return;
+        db.ref('knockoutOpen').set(newValue);
+        addToast(newValue ? '⚡ Cruces habilitados para todos' : '🔒 Cruces bloqueados', newValue ? 'success' : 'warn');
+    }, [knockoutOpen, addToast]);
  useEffect(() => {
   if (view !== 'ranking') return;
   if (!currentUser || !myRowEl.current) return;
@@ -3217,7 +3288,7 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
 )}
 </div>
 )}
-                                <PredictionView matches={matches} currentPreds={preds} updateFn={handleUpdate} groupsLocked={effectiveGroupsLocked} onLockGroups={handleLockGroups} r32Matchups={r32Matchups} knockoutLocked={effectiveKnockoutLocked} onLockKnockout={onLockKnockout} />
+                                <PredictionView matches={matches} currentPreds={preds} updateFn={handleUpdate} groupsLocked={effectiveGroupsLocked} onLockGroups={handleLockGroups} r32Matchups={r32Matchups} knockoutLocked={effectiveKnockoutLocked} onLockKnockout={onLockKnockout} knockoutOpen={knockoutOpen} />
                             </>
                         ) : (
                             <div className="text-center py-20 md:py-40 glass rounded-[2rem] md:rounded-[4rem] border-2 border-dashed border-white/5">
@@ -3320,6 +3391,17 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
                         </div>
                         )}
 
+                        <div className="glass p-6 md:p-8 rounded-[2rem] md:rounded-[3rem] border border-yellow-500/20 mb-6">
+                            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                                <div>
+                                    <h3 className="text-xl md:text-2xl font-black text-yellow-400 italic uppercase mb-2"><i className="fa-solid fa-bolt mr-3"></i>Habilitación de Eliminatorias</h3>
+                                    <p className="text-slate-400 text-sm">{knockoutOpen ? '⚡ Los usuarios YA PUEDEN cargar sus cruces de 16avos en adelante.' : '🔒 La carga de eliminatorias está BLOQUEADA para todos los usuarios.'}</p>
+                                </div>
+                                <button onClick={handleToggleKnockoutOpen} className={`px-6 py-3 rounded-2xl font-black text-xs uppercase flex items-center gap-2 transition-colors whitespace-nowrap ${knockoutOpen ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-yellow-500 hover:bg-yellow-400 text-black'}`}>
+                                    <i className={`fa-solid ${knockoutOpen ? 'fa-lock' : 'fa-bolt'}`}></i>{knockoutOpen ? 'Bloquear 16avos' : 'Habilitar 16avos'}
+                                </button>
+                            </div>
+                        </div>
                         <div className="glass p-8 md:p-12 rounded-[2rem] md:rounded-[3.5rem] border border-red-500/10">
                             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8 md:mb-12">
                                 <h3 className="text-2xl md:text-4xl font-black text-red-500 italic uppercase"><i className="fa-solid fa-clipboard-check mr-3"></i>Resultados Oficiales</h3>
@@ -3329,13 +3411,13 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
                                 </div>
                             </div>
                             <StatsDashboard preds={officialDraft} matches={matches} groupsLocked={false} />
-                        <PredictionView matches={matches} currentPreds={officialDraft} updateFn={handleOfficialUpdate} isOfficial={true} groupsLocked={false} r32Matchups={r32Matchups} knockoutLocked={false} onLockKnockout={()=>{}} groupOverrides={groupOverrides} onReorderGroup={handleReorderGroup} />
+                        <PredictionView matches={matches} currentPreds={officialDraft} updateFn={handleOfficialUpdate} isOfficial={true} groupsLocked={false} r32Matchups={r32Matchups} knockoutLocked={false} onLockKnockout={()=>{}} groupOverrides={groupOverrides} onReorderGroup={handleReorderGroup} knockoutOpen={true} />
                         </div>
                     </div>
                 )}
             </main>
             <footer className="max-w-7xl mx-auto px-6 mt-20 py-10 border-t border-white/5 text-center">
-                <p className="text-slate-700 text-xs font-bold uppercase tracking-widest">PRODE 26 · Mundial FIFA 2026 · Pasión o Razón · v22.13 🔥 CHART HIGHLIGHT + MOBILE + DELTA</p>
+                <p className="text-slate-700 text-xs font-bold uppercase tracking-widest">PRODE 26 · Mundial FIFA 2026 · Pasión o Razón · v22.19 🔥 CRUCES PROGRESIVOS + KNOCKOUT OPEN + BRACKET</p>
             </footer>
         </div>
     );
@@ -3372,10 +3454,10 @@ root.render(<App />);
   if ('serviceWorker' in navigator) {
   // Evitar error en file:// (origin null). Solo registrar en http/https
   if (location && (location.protocol === 'http:' || location.protocol === 'https:')) {
-    var swCode = "var CACHE='prode26-v22-13';var URLS=['./','https://unpkg.com/react@18/umd/react.development.js','https://unpkg.com/react-dom@18/umd/react-dom.development.js','https://unpkg.com/@babel/standalone@7.26.2/babel.min.js','https://cdn.tailwindcss.com','https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js','https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js','https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css'];self.addEventListener('install',function(e){e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(URLS)}).then(function(){return self.skipWaiting()}))});self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(ks){return Promise.all(ks.filter(function(k){return k!==CACHE}).map(function(k){return caches.delete(k)}))}).then(function(){return self.clients.claim()}))});self.addEventListener('fetch',function(e){e.respondWith(caches.match(e.request).then(function(r){return r||fetch(e.request).then(function(nr){if(nr.ok&&e.request.method==='GET'){var cl=nr.clone();caches.open(CACHE).then(function(cache){cache.put(e.request,cl)})}return nr}).catch(function(){return e.request.mode==='navigate'?caches.match('./'):new Response('Offline',{status:503})})}))})";
+    var swCode = "var CACHE='prode26-v22-19';var URLS=['./','https://unpkg.com/react@18/umd/react.development.js','https://unpkg.com/react-dom@18/umd/react-dom.development.js','https://unpkg.com/@babel/standalone@7.26.2/babel.min.js','https://cdn.tailwindcss.com','https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js','https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js','https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css'];self.addEventListener('install',function(e){e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(URLS)}).then(function(){return self.skipWaiting()}))});self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(ks){return Promise.all(ks.filter(function(k){return k!==CACHE}).map(function(k){return caches.delete(k)}))}).then(function(){return self.clients.claim()}))});self.addEventListener('fetch',function(e){e.respondWith(caches.match(e.request).then(function(r){return r||fetch(e.request).then(function(nr){if(nr.ok&&e.request.method==='GET'){var cl=nr.clone();caches.open(CACHE).then(function(cache){cache.put(e.request,cl)})}return nr}).catch(function(){return e.request.mode==='navigate'?caches.match('./'):new Response('Offline',{status:503})})}))})";
     var swBlob = new Blob([swCode], { type: 'application/javascript' });
     var swUrl = URL.createObjectURL(swBlob);
-    navigator.serviceWorker.register(swUrl, { scope: '.' }).then(function(r) { console.log('SW v22.13 registered:', r.scope); }).catch(function(e) { console.log('SW failed:', e); });
+    navigator.serviceWorker.register(swUrl, { scope: '.' }).then(function(r) { console.log('SW v22.19 registered:', r.scope); }).catch(function(e) { console.log('SW failed:', e); });
   }
 }
 })();

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PRODE Mundial 2026 - Pasión o Razón v22.19</title>
+    <title>PRODE Mundial 2026 - Pasión o Razón v22.24</title>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone@7.26.2/babel.min.js"></script>
@@ -332,6 +332,7 @@ const verifyAdminPin = (pin) => sha256(pin || '') === ADMIN_PIN_HASH;
 const fbSaveR32Matchups = (matchups) => db.ref('r32Matchups').set(matchups || {});
 const ALL_TEAMS = ([]).concat(...Object.values(EQUIPOS_POR_GRUPO));
 const GROUP_DEADLINE = new Date('2026-06-11T00:01:00-04:00');
+const KNOCKOUT_DEADLINE = new Date('2026-06-28T14:00:00-03:00');
 
 
 const copyToClipboard = async (text) => {
@@ -1652,7 +1653,7 @@ const parseMatchDateTime = (dateStr, timeStr) => {
  return new Date(2026, mon, day, h, m, 0);
 };
 
-const MatchDayPanel = memo(({ matches, preds, officialResults, currentUser, participants, onClose }) => {
+const MatchDayPanel = memo(({ matches, preds, officialResults, currentUser, participants, onClose, r32Matchups }) => {
  const [now, setNow] = useState(new Date());
  useEffect(() => { const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t); }, []);
 
@@ -1707,8 +1708,12 @@ const MatchDayPanel = memo(({ matches, preds, officialResults, currentUser, part
   const hasO = o && typeof o.ga === 'number';
   const hasU = u && typeof u.ga === 'number' && typeof u.gb === 'number';
   const hitRes = hasO && hasU && ((u.ga > u.gb ? 1 : u.ga < u.gb ? -1 : 0) === (o.ga > o.gb ? 1 : o.ga < o.gb ? -1 : 0));
-  const tA = m.teamA || (m.phase !== 'Grupos' ? 'TBD' : '');
-  const tB = m.teamB || (m.phase !== 'Grupos' ? 'TBD' : '');
+  let tA = m.teamA || (m.phase !== 'Grupos' ? 'TBD' : '');
+  let tB = m.teamB || (m.phase !== 'Grupos' ? 'TBD' : '');
+  if (m.phase === 'Dieciseisavos' && r32Matchups && r32Matchups[m.id]) {
+   tA = r32Matchups[m.id].a || 'TBD';
+   tB = r32Matchups[m.id].b || 'TBD';
+  }
   return (
    <div key={m.id} className={`matchday-card ${st.cls === 'live' ? 'is-live' : st.cls === 'finished' ? 'is-finished' : ''}`} style={{animationDelay: (idx * 0.05) + 's'}}>
     <div className="flex items-center justify-between mb-3">
@@ -1840,11 +1845,23 @@ const MisResultadosPanel = memo(({ currentUser, preds, officialResults, matches,
   let totalPlayedPoints = 0;
 
   matches.forEach(m => {
-   const o = officialResults[m.id];
-   if (!o) return;
+   if (m.phase !== 'Grupos' && m.phase !== 'Dieciseisavos') return;
 
-   const isScoredMatch = (m.phase === 'Grupos' || m.phase === 'Dieciseisavos') && typeof o.ga === 'number' && typeof o.gb === 'number';
-   if (!isScoredMatch) return;
+   const o = officialResults[m.id];
+   const hasOfficial = !!(o && typeof o.ga === 'number' && typeof o.gb === 'number');
+
+   // For Grupos: skip if no official result (only show played)
+   // For Dieciseisavos: always show (even pending) so user sees their predictions
+   if (m.phase === 'Grupos' && !hasOfficial) return;
+
+   // Resolve teams: Grupos uses m.teamA/teamB, Dieciseisavos uses r32Matchups
+   let teamA = m.teamA;
+   let teamB = m.teamB;
+   if (m.phase === 'Dieciseisavos') {
+    const cross = (r32Matchups && r32Matchups[m.id]) || {};
+    teamA = cross.a || 'TBD';
+    teamB = cross.b || 'TBD';
+   }
 
    const u = safePreds[m.id];
    let pts = 0;
@@ -1854,7 +1871,7 @@ const MisResultadosPanel = memo(({ currentUser, preds, officialResults, matches,
    let aHit = false;
    let bHit = false;
 
-   if (u && typeof u.ga === 'number' && typeof u.gb === 'number') {
+   if (hasOfficial && u && typeof u.ga === 'number' && typeof u.gb === 'number') {
     resultHit = sign(u.ga, u.gb) === sign(o.ga, o.gb);
     aHit = u.ga === o.ga;
     bHit = u.gb === o.gb;
@@ -1871,38 +1888,45 @@ const MisResultadosPanel = memo(({ currentUser, preds, officialResults, matches,
     if (exactMatch) status = 'exact';
     else if (pts > 0) status = 'partial';
     else status = 'miss';
+   } else if (!hasOfficial) {
+    // Pending match (only Dieciseisavos reaches here)
+    status = 'pending';
    } else {
     status = 'none';
    }
 
-   totalPlayedPoints += pts;
-   if (status === 'none') noPrediction += 1;
-   else if (exactMatch) exactScoreMatches += 1;
-   else if (status === 'miss') misses += 1;
+   // Only count played matches in totals
+   if (hasOfficial) {
+    totalPlayedPoints += pts;
+    if (status === 'none') noPrediction += 1;
+    else if (exactMatch) exactScoreMatches += 1;
+    else if (status === 'miss') misses += 1;
 
-   if (resultHit) resultHits += 1;
-   if (aHit) exactTeamScores += 1;
-   if (bHit) exactTeamScores += 1;
+    if (resultHit) resultHits += 1;
+    if (aHit) exactTeamScores += 1;
+    if (bHit) exactTeamScores += 1;
+   }
 
    playedMatchRows.push({
     id: m.id,
     phase: m.phase,
     group: m.group || null,
-    teamA: m.teamA,
-    teamB: m.teamB,
+    teamA: teamA,
+    teamB: teamB,
     date: m.date,
     time: m.time,
     stadium: m.stadium,
     userGa: u?.ga,
     userGb: u?.gb,
-    offGa: o.ga,
-    offGb: o.gb,
+    offGa: hasOfficial ? o.ga : null,
+    offGb: hasOfficial ? o.gb : null,
     pts,
     status,
     resultHit,
     exactMatch,
     aHit,
-    bHit
+    bHit,
+    hasOfficial
    });
   });
 
@@ -2012,6 +2036,7 @@ const MisResultadosPanel = memo(({ currentUser, preds, officialResults, matches,
   if (status === 'exact') return 'border-green-500/30 bg-green-500/10';
   if (status === 'partial') return 'border-yellow-500/30 bg-yellow-500/10';
   if (status === 'miss') return 'border-red-500/30 bg-red-500/10';
+  if (status === 'pending') return 'border-blue-500/30 bg-blue-500/5';
   return 'border-slate-700 bg-slate-900/40';
  };
 
@@ -2019,6 +2044,7 @@ const MisResultadosPanel = memo(({ currentUser, preds, officialResults, matches,
   if (status === 'exact') return 'bg-green-500/20 text-green-400';
   if (status === 'partial') return 'bg-yellow-500/20 text-yellow-400';
   if (status === 'miss') return 'bg-red-500/20 text-red-400';
+  if (status === 'pending') return 'bg-blue-500/20 text-blue-400';
   return 'bg-slate-700/30 text-slate-400';
  };
 
@@ -2026,6 +2052,7 @@ const MisResultadosPanel = memo(({ currentUser, preds, officialResults, matches,
   if (status === 'exact') return 'EXACTO';
   if (status === 'partial') return 'SUMÓ';
   if (status === 'miss') return 'FALLADO';
+  if (status === 'pending') return 'PENDIENTE';
   return 'SIN CARGA';
  };
 
@@ -2111,11 +2138,11 @@ const MisResultadosPanel = memo(({ currentUser, preds, officialResults, matches,
             </div>
             <div className="bg-slate-950/60 border border-[#deff9a]/15 rounded-xl px-3 py-2 text-center min-w-[92px]">
              <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Oficial</div>
-             <div className="text-lg font-black text-[#deff9a]">{row.offGa}<span className="text-slate-600">-</span>{row.offGb}</div>
+             <div className="text-lg font-black text-[#deff9a]">{row.hasOfficial ? row.offGa : '-'}<span className="text-slate-600">-</span>{row.hasOfficial ? row.offGb : '-'}</div>
             </div>
             <div className="text-center min-w-[86px]">
              <span className={`inline-flex px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${badgeClass(row.status)}`}>{badgeLabel(row.status)}</span>
-             <div className={`text-xl font-black mt-1 ${row.pts > 0 ? 'text-green-400' : 'text-slate-500'}`}>+{row.pts}</div>
+             <div className={`text-xl font-black mt-1 ${row.pts > 0 ? 'text-green-400' : row.status === 'pending' ? 'text-blue-400' : 'text-slate-500'}`}>{row.status === 'pending' ? '—' : '+' + row.pts}</div>
             </div>
            </div>
           </div>
@@ -2154,11 +2181,11 @@ const MisResultadosPanel = memo(({ currentUser, preds, officialResults, matches,
             </div>
             <div className="bg-slate-950/60 border border-[#deff9a]/15 rounded-xl px-3 py-2 text-center min-w-[92px]">
              <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Oficial</div>
-             <div className="text-lg font-black text-[#deff9a]">{row.offGa}<span className="text-slate-600">-</span>{row.offGb}</div>
+             <div className="text-lg font-black text-[#deff9a]">{row.hasOfficial ? row.offGa : '-'}<span className="text-slate-600">-</span>{row.hasOfficial ? row.offGb : '-'}</div>
             </div>
             <div className="text-center min-w-[86px]">
              <span className={`inline-flex px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${badgeClass(row.status)}`}>{badgeLabel(row.status)}</span>
-             <div className={`text-xl font-black mt-1 ${row.pts > 0 ? 'text-green-400' : 'text-slate-500'}`}>+{row.pts}</div>
+             <div className={`text-xl font-black mt-1 ${row.pts > 0 ? 'text-green-400' : row.status === 'pending' ? 'text-blue-400' : 'text-slate-500'}`}>{row.status === 'pending' ? '—' : '+' + row.pts}</div>
             </div>
            </div>
           </div>
@@ -2361,7 +2388,7 @@ function App() {
  officialDraftRef.current = officialDraft;
  const overrideActiveCurrentUser = !!(currentUser && isOverrideActive(currentUser));
  const effectiveGroupsLocked = groupsLocked && !overrideActiveCurrentUser;
- const effectiveKnockoutLocked = !knockoutOpen && knockoutLocked && !overrideActiveCurrentUser;
+ const effectiveKnockoutLocked = !knockoutOpen && (overrideNow >= KNOCKOUT_DEADLINE.getTime()) && !overrideActiveCurrentUser;
  effectiveGroupsLockedRef.current = effectiveGroupsLocked;
  effectiveKnockoutLockedRef.current = effectiveKnockoutLocked;
     useEffect(() => {
@@ -2369,7 +2396,8 @@ function App() {
         const me = participants.find(p => p.name === currentUser);
         if (!me) return;
         setGroupsLocked(me.groupsLocked || false);
-        setKnockoutLocked(me.knockoutLocked || false);
+        // v22.22: knockoutLocked no longer syncs - only deadline matters
+        setKnockoutLocked(false);
     }, [participants, currentUser]);
 
     const matches = useMemo(() => {
@@ -2725,13 +2753,7 @@ function App() {
         if (!currentUser || !hasUnsaved) return;
         if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
         autoSaveTimer.current = setTimeout(() => {
-            let finalKnockout = knockoutLocked;
-            if (groupsLocked && !knockoutLocked && isKnockoutComplete()) {
-                finalKnockout = true;
-                setKnockoutLocked(true);
-                addToast('\uD83D\uDD12 Eliminatoria completa \u2014 bloqueada autom\u00e1ticamente', 'success');
-            }
-            fbSaveParticipant({ name: currentUser, predictions: preds, groupsLocked, knockoutLocked: finalKnockout });
+            fbSaveParticipant({ name: currentUser, predictions: preds, groupsLocked, knockoutLocked });
             setHasUnsaved(false); addToast('Auto-guardado completado', 'success');
         }, 2000);
         return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
@@ -2844,6 +2866,20 @@ addToast('\uD83D\uDD12 Grupos bloqueados (inicio del mundial)', 'warn');
 }
 }, [currentUser, groupsLocked]);
 
+// Auto-lock knockout phase 1h before first R32 match (v22.21)
+useEffect(() => {
+    if (!knockoutOpen) return;
+    const checkDeadline = () => {
+        if (new Date() >= KNOCKOUT_DEADLINE) {
+            db.ref('knockoutOpen').set(false);
+            addToast('\uD83D\uDD12 Fase eliminatoria bloqueada autom\u00e1ticamente (deadline)', 'warn');
+        }
+    };
+    checkDeadline();
+    const interval = setInterval(checkDeadline, 60000);
+    return () => clearInterval(interval);
+}, [knockoutOpen, addToast]);
+
 const handleLockGroups = useCallback(() => {
         if (window.confirm('¿Bloquear la fase de grupos? Una vez bloqueado, NO podrás modificar los pronósticos de grupos.')) {
             setGroupsLocked(true);
@@ -2879,13 +2915,9 @@ const handleLockGroups = useCallback(() => {
 
     const handleSave = () => {
         if (!currentUser) return;
-        const lockNow = groupsLocked && !knockoutLocked && (typeof isKnockoutComplete === 'function') && isKnockoutComplete();
-        const newKnock = lockNow ? true : knockoutLocked;
-        setKnockoutLocked(newKnock);
-        fbSaveParticipant({ name: currentUser, predictions: preds, groupsLocked, knockoutLocked: newKnock });
+        fbSaveParticipant({ name: currentUser, predictions: preds, groupsLocked, knockoutLocked });
         setHasUnsaved(false);
-        if (lockNow) addToast('\uD83D\uDD12 Eliminatoria bloqueada al guardar', 'success');
-        else addToast('¡Progreso guardado!', 'success');
+        addToast('¡Progreso guardado!', 'success');
     };
     const handleExportClipboard = async () => {
         const code = btoa(unescape(encodeURIComponent(JSON.stringify({ name: currentUser, predictions: preds, groupsLocked }))));
@@ -3052,7 +3084,7 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
             )}
             {showConfetti && <Confetti />}
             <ToastContainer toasts={toasts} removeToast={removeToast} />
-                 {showMatchDay && <MatchDayPanel matches={matches} preds={preds} officialResults={officialResults} currentUser={currentUser} participants={participants} onClose={() => setShowMatchDay(false)} />}
+                 {showMatchDay && <MatchDayPanel matches={matches} preds={preds} officialResults={officialResults} currentUser={currentUser} participants={participants} onClose={() => setShowMatchDay(false)} r32Matchups={r32Matchups} />}
      <button onClick={() => setShowMatchDay(true)} className="matchday-fab" title="Día de Partido">
       <i className="fa-solid fa-futbol text-lg"></i>
       <span style={{fontSize:7,fontWeight:900,letterSpacing:'0.05em',marginTop:1}}>HOY</span>
@@ -3396,6 +3428,7 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
                                 <div>
                                     <h3 className="text-xl md:text-2xl font-black text-yellow-400 italic uppercase mb-2"><i className="fa-solid fa-bolt mr-3"></i>Habilitación de Eliminatorias</h3>
                                     <p className="text-slate-400 text-sm">{knockoutOpen ? '⚡ Los usuarios YA PUEDEN cargar sus cruces de 16avos en adelante.' : '🔒 La carga de eliminatorias está BLOQUEADA para todos los usuarios.'}</p>
+                                    <p className="text-slate-500 text-xs mt-2 italic">⏰ Cierre automático: Domingo 28 Jun, 14:00 (1h antes del primer partido)</p>
                                 </div>
                                 <button onClick={handleToggleKnockoutOpen} className={`px-6 py-3 rounded-2xl font-black text-xs uppercase flex items-center gap-2 transition-colors whitespace-nowrap ${knockoutOpen ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-yellow-500 hover:bg-yellow-400 text-black'}`}>
                                     <i className={`fa-solid ${knockoutOpen ? 'fa-lock' : 'fa-bolt'}`}></i>{knockoutOpen ? 'Bloquear 16avos' : 'Habilitar 16avos'}
@@ -3417,7 +3450,7 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
                 )}
             </main>
             <footer className="max-w-7xl mx-auto px-6 mt-20 py-10 border-t border-white/5 text-center">
-                <p className="text-slate-700 text-xs font-bold uppercase tracking-widest">PRODE 26 · Mundial FIFA 2026 · Pasión o Razón · v22.19 🔥 CRUCES PROGRESIVOS + KNOCKOUT OPEN + BRACKET</p>
+                <p className="text-slate-700 text-xs font-bold uppercase tracking-widest">PRODE 26 · Mundial FIFA 2026 · Pasión o Razón · v22.24 🔥 MATCHDAY R32 TEAMS + DEADLINE</p>
             </footer>
         </div>
     );
@@ -3454,10 +3487,10 @@ root.render(<App />);
   if ('serviceWorker' in navigator) {
   // Evitar error en file:// (origin null). Solo registrar en http/https
   if (location && (location.protocol === 'http:' || location.protocol === 'https:')) {
-    var swCode = "var CACHE='prode26-v22-19';var URLS=['./','https://unpkg.com/react@18/umd/react.development.js','https://unpkg.com/react-dom@18/umd/react-dom.development.js','https://unpkg.com/@babel/standalone@7.26.2/babel.min.js','https://cdn.tailwindcss.com','https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js','https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js','https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css'];self.addEventListener('install',function(e){e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(URLS)}).then(function(){return self.skipWaiting()}))});self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(ks){return Promise.all(ks.filter(function(k){return k!==CACHE}).map(function(k){return caches.delete(k)}))}).then(function(){return self.clients.claim()}))});self.addEventListener('fetch',function(e){e.respondWith(caches.match(e.request).then(function(r){return r||fetch(e.request).then(function(nr){if(nr.ok&&e.request.method==='GET'){var cl=nr.clone();caches.open(CACHE).then(function(cache){cache.put(e.request,cl)})}return nr}).catch(function(){return e.request.mode==='navigate'?caches.match('./'):new Response('Offline',{status:503})})}))})";
+    var swCode = "var CACHE='prode26-v22-24';var URLS=['./','https://unpkg.com/react@18/umd/react.development.js','https://unpkg.com/react-dom@18/umd/react-dom.development.js','https://unpkg.com/@babel/standalone@7.26.2/babel.min.js','https://cdn.tailwindcss.com','https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js','https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js','https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css'];self.addEventListener('install',function(e){e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(URLS)}).then(function(){return self.skipWaiting()}))});self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(ks){return Promise.all(ks.filter(function(k){return k!==CACHE}).map(function(k){return caches.delete(k)}))}).then(function(){return self.clients.claim()}))});self.addEventListener('fetch',function(e){e.respondWith(caches.match(e.request).then(function(r){return r||fetch(e.request).then(function(nr){if(nr.ok&&e.request.method==='GET'){var cl=nr.clone();caches.open(CACHE).then(function(cache){cache.put(e.request,cl)})}return nr}).catch(function(){return e.request.mode==='navigate'?caches.match('./'):new Response('Offline',{status:503})})}))})";
     var swBlob = new Blob([swCode], { type: 'application/javascript' });
     var swUrl = URL.createObjectURL(swBlob);
-    navigator.serviceWorker.register(swUrl, { scope: '.' }).then(function(r) { console.log('SW v22.19 registered:', r.scope); }).catch(function(e) { console.log('SW failed:', e); });
+    navigator.serviceWorker.register(swUrl, { scope: '.' }).then(function(r) { console.log('SW v22.24 registered:', r.scope); }).catch(function(e) { console.log('SW failed:', e); });
   }
 }
 })();

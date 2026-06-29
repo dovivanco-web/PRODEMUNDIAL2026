@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PRODE Mundial 2026 - Pasión o Razón v22.25</title>
+    <title>PRODE Mundial 2026 - Pasión o Razón v22.26</title>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone@7.26.2/babel.min.js"></script>
@@ -2316,6 +2316,7 @@ function App() {
  const [showMatchDay, setShowMatchDay] = useState(false);
     const [showComparison, setShowComparison] = useState(false);
     const [unlockOverrides, setUnlockOverrides] = useState({});
+    const [knockoutUnlockOverrides, setKnockoutUnlockOverrides] = useState({});
     const [overrideNow, setOverrideNow] = useState(Date.now());
     const [searchQuery, setSearchQuery] = useState('');
     const [adminUnlocked, setAdminUnlocked] = useState(false);
@@ -2378,6 +2379,31 @@ function App() {
         });
         addToast(`🔒 Override removido para ${name}`, 'warn');
     }, [addToast]);
+    const isKnockoutOverrideActive = useCallback((name) => {
+        const until = knockoutUnlockOverrides[name];
+        return !!(until && until > overrideNow);
+    }, [knockoutUnlockOverrides, overrideNow]);
+    const getKnockoutOverrideRemaining = useCallback((name) => {
+        const until = knockoutUnlockOverrides[name];
+        if (!until || until <= overrideNow) return null;
+        const diff = until - overrideNow;
+        const mins = Math.floor(diff / 60000);
+        const secs = Math.floor((diff % 60000) / 1000);
+        return `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+    }, [knockoutUnlockOverrides, overrideNow]);
+    const unlockKnockoutTemporarily = useCallback((name, minutes = 15) => {
+        const until = Date.now() + (minutes * 60 * 1000);
+        setKnockoutUnlockOverrides(prev => ({ ...prev, [name]: until }));
+        addToast(`⚽ ${name}: 16avos desbloqueado ${minutes} min`, 'success');
+    }, [addToast]);
+    const clearKnockoutOverride = useCallback((name) => {
+        setKnockoutUnlockOverrides(prev => {
+            const next = { ...prev };
+            delete next[name];
+            return next;
+        });
+        addToast(`🔒 Override 16avos removido para ${name}`, 'warn');
+    }, [addToast]);
     useEffect(() => {
         const t = setInterval(() => setOverrideNow(Date.now()), 1000);
         return () => clearInterval(t);
@@ -2388,7 +2414,8 @@ function App() {
  officialDraftRef.current = officialDraft;
  const overrideActiveCurrentUser = !!(currentUser && isOverrideActive(currentUser));
  const effectiveGroupsLocked = groupsLocked && !overrideActiveCurrentUser;
- const effectiveKnockoutLocked = !knockoutOpen && (overrideNow >= KNOCKOUT_DEADLINE.getTime()) && !overrideActiveCurrentUser;
+ const knockoutOverrideActiveCurrentUser = !!(currentUser && isKnockoutOverrideActive(currentUser));
+ const effectiveKnockoutLocked = !knockoutOpen && (overrideNow >= KNOCKOUT_DEADLINE.getTime()) && !knockoutOverrideActiveCurrentUser;
  effectiveGroupsLockedRef.current = effectiveGroupsLocked;
  effectiveKnockoutLockedRef.current = effectiveKnockoutLocked;
     useEffect(() => {
@@ -3348,13 +3375,19 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
                                             <i className="fa-solid fa-user text-slate-600 text-sm"></i>
                                             <span className="font-bold truncate">{p.name}</span>
                                             {p.groupsLocked && !isOverrideActive(p.name) && <span className="text-[8px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded font-black">{'\uD83D\uDD12'}</span>}
-                                            {isOverrideActive(p.name) && <span className="text-[8px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded font-black">🔓 {getOverrideRemaining(p.name)}</span>}
+                                            {isOverrideActive(p.name) && <span className="text-[8px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded font-black">🔓G {getOverrideRemaining(p.name)}</span>}
+                                            {isKnockoutOverrideActive(p.name) && <span className="text-[8px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded font-black">⚽K {getKnockoutOverrideRemaining(p.name)}</span>}
                                         </div>
                                         <div className="flex items-center gap-1 flex-wrap justify-end">
 {isOverrideActive(p.name) ? (
-  <button onClick={() => clearUserOverride(p.name)} className="text-yellow-400 hover:text-yellow-300 transition-all px-2 py-1 text-[10px] font-black uppercase rounded-lg border border-yellow-500/20 hover:bg-yellow-500/10" title="Quitar override">Quitar Override</button>
+  <button onClick={() => clearUserOverride(p.name)} className="text-yellow-400 hover:text-yellow-300 transition-all px-2 py-1 text-[10px] font-black uppercase rounded-lg border border-yellow-500/20 hover:bg-yellow-500/10" title="Quitar override grupos">🔓 Quitar G</button>
 ) : (
-  <button onClick={() => unlockUserTemporarily(p.name, 15)} className="text-yellow-400 hover:text-yellow-300 transition-all px-2 py-1 text-[10px] font-black uppercase rounded-lg border border-yellow-500/20 hover:bg-yellow-500/10" title="Desbloquear 15 min">🔓 15 min</button>
+  <button onClick={() => unlockUserTemporarily(p.name, 15)} className="text-yellow-400 hover:text-yellow-300 transition-all px-2 py-1 text-[10px] font-black uppercase rounded-lg border border-yellow-500/20 hover:bg-yellow-500/10" title="Desbloquear grupos 15 min">🔓 G 15min</button>
+)}
+{isKnockoutOverrideActive(p.name) ? (
+  <button onClick={() => clearKnockoutOverride(p.name)} className="text-orange-400 hover:text-orange-300 transition-all px-2 py-1 text-[10px] font-black uppercase rounded-lg border border-orange-500/20 hover:bg-orange-500/10" title="Quitar override 16avos">⚽ Quitar K</button>
+) : (
+  <button onClick={() => unlockKnockoutTemporarily(p.name, 15)} className="text-orange-400 hover:text-orange-300 transition-all px-2 py-1 text-[10px] font-black uppercase rounded-lg border border-orange-500/20 hover:bg-orange-500/10" title="Desbloquear 16avos 15 min">⚽ K 15min</button>
 )}
 {canManageAdmins && p.name !== ADMIN_USER && (
   p.isAdmin ? (
@@ -3450,7 +3483,7 @@ const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
                 )}
             </main>
             <footer className="max-w-7xl mx-auto px-6 mt-20 py-10 border-t border-white/5 text-center">
-                <p className="text-slate-700 text-xs font-bold uppercase tracking-widest">PRODE 26 · Mundial FIFA 2026 · Pasión o Razón · v22.25 🔥 DEADLINE 1MIN BEFORE M73</p>
+                <p className="text-slate-700 text-xs font-bold uppercase tracking-widest">PRODE 26 · Mundial FIFA 2026 · Pasión o Razón · v22.26 🔥 KNOCKOUT OVERRIDE INDEPENDIENTE</p>
             </footer>
         </div>
     );
@@ -3487,10 +3520,10 @@ root.render(<App />);
   if ('serviceWorker' in navigator) {
   // Evitar error en file:// (origin null). Solo registrar en http/https
   if (location && (location.protocol === 'http:' || location.protocol === 'https:')) {
-    var swCode = "var CACHE='prode26-v22-25';var URLS=['./','https://unpkg.com/react@18/umd/react.development.js','https://unpkg.com/react-dom@18/umd/react-dom.development.js','https://unpkg.com/@babel/standalone@7.26.2/babel.min.js','https://cdn.tailwindcss.com','https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js','https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js','https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css'];self.addEventListener('install',function(e){e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(URLS)}).then(function(){return self.skipWaiting()}))});self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(ks){return Promise.all(ks.filter(function(k){return k!==CACHE}).map(function(k){return caches.delete(k)}))}).then(function(){return self.clients.claim()}))});self.addEventListener('fetch',function(e){e.respondWith(caches.match(e.request).then(function(r){return r||fetch(e.request).then(function(nr){if(nr.ok&&e.request.method==='GET'){var cl=nr.clone();caches.open(CACHE).then(function(cache){cache.put(e.request,cl)})}return nr}).catch(function(){return e.request.mode==='navigate'?caches.match('./'):new Response('Offline',{status:503})})}))})";
+    var swCode = "var CACHE='prode26-v22-26';var URLS=['./','https://unpkg.com/react@18/umd/react.development.js','https://unpkg.com/react-dom@18/umd/react-dom.development.js','https://unpkg.com/@babel/standalone@7.26.2/babel.min.js','https://cdn.tailwindcss.com','https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js','https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js','https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css'];self.addEventListener('install',function(e){e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(URLS)}).then(function(){return self.skipWaiting()}))});self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(ks){return Promise.all(ks.filter(function(k){return k!==CACHE}).map(function(k){return caches.delete(k)}))}).then(function(){return self.clients.claim()}))});self.addEventListener('fetch',function(e){e.respondWith(caches.match(e.request).then(function(r){return r||fetch(e.request).then(function(nr){if(nr.ok&&e.request.method==='GET'){var cl=nr.clone();caches.open(CACHE).then(function(cache){cache.put(e.request,cl)})}return nr}).catch(function(){return e.request.mode==='navigate'?caches.match('./'):new Response('Offline',{status:503})})}))})";
     var swBlob = new Blob([swCode], { type: 'application/javascript' });
     var swUrl = URL.createObjectURL(swBlob);
-    navigator.serviceWorker.register(swUrl, { scope: '.' }).then(function(r) { console.log('SW v22.25 registered:', r.scope); }).catch(function(e) { console.log('SW failed:', e); });
+    navigator.serviceWorker.register(swUrl, { scope: '.' }).then(function(r) { console.log('SW v22.26 registered:', r.scope); }).catch(function(e) { console.log('SW failed:', e); });
   }
 }
 })();
